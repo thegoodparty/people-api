@@ -1,0 +1,9 @@
+model VoterFile {
+  Filename String @db.Text() @id @unique
+  State    String @db.Text()
+  Lines    Int    @db.Integer() @default(0)
+  Loaded   Boolean @default(false)
+  updatedAt DateTime @default(now())
+  
+  @@index([Filename])  
+}
