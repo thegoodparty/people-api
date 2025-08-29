@@ -3,7 +3,7 @@
 export default $config({
   app(input) {
     return {
-      name: 'voter-api',
+      name: 'people-api',
       removal: input?.stage === 'master' ? 'retain' : 'remove',
       home: 'aws',
       providers: {
@@ -19,18 +19,12 @@ export default $config({
     const pulumi = await import('@pulumi/pulumi')
     const vpc = sst.aws.Vpc.get('api', 'vpc-0763fa52c32ebcf6a')
 
-    if ($app.stage !== 'master' && $app.stage !== 'develop') {
-      throw new Error('Invalid stage. Only master and develop are supported.')
-    }
+    // Only prod (master) provisions infra; all other stages are no-op for local dev
+    const isProd = $app.stage === 'master'
+    if (!isProd) return
 
-    const apiDomain: string =
-      $app.stage === 'master'
-        ? 'voter-api.goodparty.org'
-        : 'voter-api-dev.goodparty.org'
-    const webAppRootUrl: string =
-      $app.stage === 'master'
-        ? 'https://goodparty.org'
-        : 'https://dev.goodparty.org'
+    const apiDomain: string = 'people-api.goodparty.org'
+    const webAppRootUrl: string = 'https://goodparty.org'
 
     // function to extract the username, password, and database name from the database url
     // which the docker container needs to run migrations.
@@ -47,7 +41,7 @@ export default $config({
       vpc,
       transform: {
         cluster: (clusterArgs, opts, name) => {
-          clusterArgs.name = `voter-api-${$app.stage}-fargateCluster`
+          clusterArgs.name = `people-api-${$app.stage}-fargateCluster`
         },
       },
     })
@@ -61,14 +55,9 @@ export default $config({
     // Fetch the JSON secret using Pulumi's AWS SDK
     let secretArn: string | undefined
 
-    // Select GP API secret by stage (contains VOTER_DATASTORE)
-    if ($app.stage === 'master') {
-      secretArn =
-        'arn:aws:secretsmanager:us-west-2:333022194791:secret:GP_API_PROD-kvf2EI'
-    } else if ($app.stage === 'develop') {
-      secretArn =
-        'arn:aws:secretsmanager:us-west-2:333022194791:secret:GP_API_DEV-ag7Mf4'
-    }
+    // Prod secret only
+    secretArn =
+      'arn:aws:secretsmanager:us-west-2:333022194791:secret:GP_PEOPLE_API_PROD-tXhM8a'
 
     if (!secretArn) {
       throw new Error(
@@ -89,7 +78,7 @@ export default $config({
       secretsJson = JSON.parse(secretString || '{}')
 
       for (const [key, value] of Object.entries(secretsJson)) {
-        if (key === 'VOTER_DATASTORE') {
+        if (key === 'DATABASE_URL') {
           const { username, password, database } = extractDbCredentials(
             value as string,
           )
@@ -110,10 +99,10 @@ export default $config({
     }
 
     if (!dbName || !dbUser || !dbPassword || !vpcCidr || !dbUrl) {
-      throw new Error('VOTER_DATASTORE, VPC_CIDR keys must be set in the secret.')
+      throw new Error('DATABASE_URL, VPC_CIDR keys must be set in the secret.')
     }
 
-    new sst.aws.Service(`voter-api-${$app.stage}`, {
+    new sst.aws.Service(`people-api-${$app.stage}`, {
       cluster,
       loadBalancer: {
         domain: apiDomain,
@@ -149,10 +138,7 @@ export default $config({
         PORT: '80',
         HOST: '0.0.0.0',
         LOG_LEVEL: 'debug',
-        CORS_ORIGIN:
-          $app.stage === 'master'
-            ? 'https://goodparty.org'
-            : 'https://dev.goodparty.org',
+        CORS_ORIGIN: 'https://goodparty.org',
         AWS_REGION: 'us-west-2',
         WEBAPP_ROOT_URL: webAppRootUrl,
         ...secretsJson,
@@ -176,93 +162,9 @@ export default $config({
       },
     })
 
-    let rdsSecurityGroupName: string
-    let rdsSecurityGroupId: string
-
-    if ($app.stage === 'develop') {
-      rdsSecurityGroupName = 'api-rds-security-group'
-      rdsSecurityGroupId = 'sg-0b834a3f7b64950d0'
-    } else if ($app.stage === 'master') {
-      rdsSecurityGroupName = 'api-master-rds-security-group'
-      rdsSecurityGroupId = 'sg-03783e4adbbee87dc'
-    } else {
-      throw new Error('Unrecognized app stage')
-    }
-
-    const rdsSecurityGroup = aws.ec2.SecurityGroup.get(
-      rdsSecurityGroupName,
-      rdsSecurityGroupId,
-    )
-
-    if (!rdsSecurityGroup) {
-      throw new Error('RDS Security Group not found')
-    }
-
-    const subnetGroupName =
-      $app.stage === 'develop'
-        ? 'api-rds-subnet-group'
-        : `api-${$app.stage}-rds-subnet-group`
-    const subnetGroup = await aws.rds.getSubnetGroup({ name: subnetGroupName })
-
-    // Warning: Do not change the clusterIdentifier.
-    // The clusterIdentifier is used as a unique identifier for your RDS cluster.
-    // Changing it will cause Pulumi/SST to try to create a new RDS cluster and delete the old one
-    // which would result in data loss. This is because the clusterIdentifier is part of the cluster's
-    // identity and cannot be modified in place.
-    const createCluster = $app.stage === 'master' || $app.stage === 'develop'
-
-    if (createCluster) {
-      // Primary voter cluster
-      const voterDbProdConfig: aws.rds.ClusterArgs = {
-        clusterIdentifier: $app.stage === 'master' ? 'gp-voter-db' : 'gp-voter-db-develop',
-        engine: aws.rds.EngineType.AuroraPostgresql,
-        engineMode: aws.rds.EngineMode.Provisioned,
-        engineVersion: '16.6',
-        databaseName: dbName,
-        masterUsername: dbUser,
-        masterPassword: dbPassword,
-        dbSubnetGroupName: subnetGroup.name,
-        vpcSecurityGroupIds: [rdsSecurityGroup.id],
-        storageEncrypted: true,
-        deletionProtection: true,
-        finalSnapshotIdentifier: `gp-voter-db-${$app.stage}-final-snapshot`,
-        serverlessv2ScalingConfiguration: {
-          maxCapacity: 128,
-          minCapacity: 0.5,
-        },
-      }
-
-      const voterCluster = new aws.rds.Cluster('voterCluster', voterDbProdConfig)
-
-      new aws.rds.ClusterInstance('voterInstance', {
-        clusterIdentifier: voterCluster.id,
-        instanceClass: 'db.serverless',
-        engine: aws.rds.EngineType.AuroraPostgresql,
-        engineVersion: voterCluster.engineVersion,
-      })
-
-      // Second voter cluster for database swap operation in prod
-      if ($app.stage === 'master') {
-        const voterClusterLatest = new aws.rds.Cluster('voterClusterLatest', {
-          ...voterDbProdConfig,
-          clusterIdentifier: 'gp-voter-db-20250728',
-          finalSnapshotIdentifier: `gp-voter-db-${$app.stage}-20250728-final-snapshot`,
-        })
-
-        new aws.rds.ClusterInstance('voterInstanceLatest', {
-          clusterIdentifier: voterClusterLatest.id,
-          instanceClass: 'db.serverless',
-          engine: aws.rds.EngineType.AuroraPostgresql,
-          engineVersion: voterClusterLatest.engineVersion,
-        })
-      }
-    } else {
-      // Reference existing clusters by identifier if not creating
-      aws.rds.Cluster.get(
-        'voterCluster',
-        $app.stage === 'master' ? 'gp-voter-db' : 'gp-voter-db-develop',
-      )
-    }
+    // Reference the existing swap voter DB cluster only (no creation here)
+    const swapClusterIdentifier = 'gp-voter-db-20250728'
+    aws.rds.Cluster.get('swapVoterCluster', swapClusterIdentifier)
 
     const codeBuildRole = new aws.iam.Role('codebuild-service-role', {
       assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({
@@ -271,8 +173,8 @@ export default $config({
       managedPolicyArns: ['arn:aws:iam::aws:policy/AdministratorAccess'],
     })
 
-    new aws.codebuild.Project('election-api-deploy-build', {
-      name: `election-api-deploy-build-${$app.stage}`,
+    new aws.codebuild.Project('people-api-deploy-build', {
+      name: `people-api-deploy-build-${$app.stage}`,
       serviceRole: codeBuildRole.arn,
       environment: {
         computeType: 'BUILD_GENERAL1_LARGE',
@@ -287,12 +189,12 @@ export default $config({
           },
           {
             name: 'CLUSTER_NAME',
-            value: `election-api-${$app.stage}-fargateCluster`,
+            value: `people-api-${$app.stage}-fargateCluster`,
             type: 'PLAINTEXT',
           },
           {
             name: 'SERVICE_NAME',
-            value: `election-api-${$app.stage}`,
+            value: `people-api-${$app.stage}`,
             type: 'PLAINTEXT',
           },
         ],
@@ -304,7 +206,7 @@ export default $config({
       },
       source: {
         type: 'GITHUB',
-        location: 'https://github.com/thegoodparty/gp-api.git',
+        location: 'https://github.com/thegoodparty/people-api.git',
         buildspec: 'deploy/buildspec.yml',
       },
       artifacts: {
@@ -324,7 +226,7 @@ export default $config({
               'codebuild:BatchGetBuilds',
               'codebuild:ListBuildsForProject',
             ],
-            Resource: 'arn:aws:codebuild:us-west:333022194791:project/',
+            Resource: 'arn:aws:codebuild:us-west-2:333022194791:project/*',
           },
           {
             Effect: 'Allow',
