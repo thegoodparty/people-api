@@ -4,7 +4,10 @@ export default $config({
   app(input) {
     return {
       name: 'people-api',
-      removal: input?.stage === 'master' ? 'retain' : 'remove',
+      removal:
+        input?.stage === 'master' || input?.stage === 'develop'
+          ? 'retain'
+          : 'remove',
       home: 'aws',
       providers: {
         aws: {
@@ -19,12 +22,19 @@ export default $config({
     const pulumi = await import('@pulumi/pulumi')
     const vpc = sst.aws.Vpc.get('api', 'vpc-0763fa52c32ebcf6a')
 
-    // Only prod (master) provisions infra; all other stages are no-op for local dev
-    const isProd = $app.stage === 'master'
-    if (!isProd) return
+    if ($app.stage !== 'master' && $app.stage !== 'develop') {
+      throw new Error('Invalid stage. Only master, and develop are supported.')
+    }
 
-    const apiDomain: string = 'people-api.goodparty.org'
-    const webAppRootUrl: string = 'https://goodparty.org'
+    const isProd = $app.stage === 'master'
+    const isDevelop = $app.stage === 'develop'
+
+    const apiDomain: string = isProd
+      ? 'people-api.goodparty.org'
+      : 'people-api-develop.goodparty.org'
+    const webAppRootUrl: string = isProd
+      ? 'https://goodparty.org'
+      : 'https://develop.goodparty.org'
 
     // function to extract the username, password, and database name from the database url
     // which the docker container needs to run migrations.
@@ -55,50 +65,52 @@ export default $config({
     // Fetch the JSON secret using Pulumi's AWS SDK
     let secretArn: string | undefined
 
-    // Prod secret only
-    secretArn =
-      'arn:aws:secretsmanager:us-west-2:333022194791:secret:GP_PEOPLE_API_PROD-tXhM8a'
-
-    if (!secretArn) {
-      throw new Error(
-        'No secretArn found for this stage. secretArn must be configured.',
-      )
+    // Stage-specific secret selection
+    if (isProd) {
+      secretArn =
+        'arn:aws:secretsmanager:us-west-2:333022194791:secret:GP_PEOPLE_API_PROD-tXhM8a'
+    } else if (isDevelop) {
+      // Optionally provide the develop secret ARN via environment variable
+      secretArn =
+        'arn:aws:secretsmanager:us-west-2:333022194791:secret:PEOPLE_API_DEV-3oNjn3'
     }
-
-    const secretVersion = aws.secretsmanager.getSecretVersion({
-      secretId: secretArn,
-    })
-
-    // Use async/await to get the actual secret value
-    const secretString = await secretVersion.then((v) => v.secretString)
 
     const secrets: object[] = []
     let secretsJson: Record<string, string> = {}
-    try {
-      secretsJson = JSON.parse(secretString || '{}')
+    if (secretArn) {
+      const secretVersion = aws.secretsmanager.getSecretVersion({
+        secretId: secretArn,
+      })
 
-      for (const [key, value] of Object.entries(secretsJson)) {
-        if (key === 'DATABASE_URL') {
-          const { username, password, database } = extractDbCredentials(
-            value as string,
-          )
-          dbUrl = value as string
-          dbName = database
-          dbUser = username
-          dbPassword = password
+      // Use async/await to get the actual secret value
+      const secretString = await secretVersion.then((v) => v.secretString)
+
+      try {
+        secretsJson = JSON.parse(secretString || '{}')
+
+        for (const [key, value] of Object.entries(secretsJson)) {
+          if (key === 'DATABASE_URL') {
+            const { username, password, database } = extractDbCredentials(
+              value as string,
+            )
+            dbUrl = value as string
+            dbName = database
+            dbUser = username
+            dbPassword = password
+          }
+          if (key === 'VPC_CIDR') {
+            vpcCidr = value as string
+          }
+          secrets.push({ key: value })
         }
-        if (key === 'VPC_CIDR') {
-          vpcCidr = value as string
-        }
-        secrets.push({ key: value })
+      } catch (e) {
+        throw new Error(
+          'Failed to parse GP_SECRETS JSON: ' + (e as Error).message,
+        )
       }
-    } catch (e) {
-      throw new Error(
-        'Failed to parse GP_SECRETS JSON: ' + (e as Error).message,
-      )
     }
 
-    if (!dbName || !dbUser || !dbPassword || !vpcCidr || !dbUrl) {
+    if (isProd && (!dbName || !dbUser || !dbPassword || !vpcCidr || !dbUrl)) {
       throw new Error('DATABASE_URL, VPC_CIDR keys must be set in the secret.')
     }
 
@@ -117,20 +129,23 @@ export default $config({
           },
         },
       },
-      capacity:
-        $app.stage === 'master'
+      capacity: isProd
+        ? {
+            fargate: { weight: 1, base: 1 },
+            spot: { weight: 1 },
+          }
+        : isDevelop
           ? {
-              fargate: { weight: 1, base: 1 },
-              spot: { weight: 1 },
+              spot: { weight: 1, base: 0 },
             }
           : {
               spot: { weight: 1, base: 1 },
             },
-      memory: $app.stage === 'master' ? '4 GB' : '2 GB',
-      cpu: $app.stage === 'master' ? '1 vCPU' : '0.5 vCPU',
+      memory: isProd ? '4 GB' : '2 GB',
+      cpu: isProd ? '1 vCPU' : '0.5 vCPU',
       scaling: {
-        min: $app.stage === 'master' ? 2 : 1,
-        max: $app.stage === 'master' ? 16 : 4,
+        min: isProd ? 2 : isDevelop ? 0 : 1,
+        max: isProd ? 16 : 4,
         cpuUtilization: 50,
         memoryUtilization: 50,
       },
@@ -138,12 +153,12 @@ export default $config({
         PORT: '80',
         HOST: '0.0.0.0',
         LOG_LEVEL: 'debug',
-        CORS_ORIGIN: 'https://goodparty.org',
+        CORS_ORIGIN: webAppRootUrl,
         AWS_REGION: 'us-west-2',
         WEBAPP_ROOT_URL: webAppRootUrl,
         ...secretsJson,
         // Ensure the application uses the voter database URL
-        DATABASE_URL: dbUrl,
+        DATABASE_URL: dbUrl ?? '',
       },
       image: {
         context: '../',
@@ -151,7 +166,7 @@ export default $config({
         args: {
           DOCKER_BUILDKIT: '1',
           CACHEBUST: '1',
-          DATABASE_URL: dbUrl,
+          DATABASE_URL: dbUrl ?? '',
           STAGE: $app.stage,
         },
       },
