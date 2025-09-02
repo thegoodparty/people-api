@@ -1,42 +1,72 @@
-# election-api
+# Goodparty.org People-API
 
-## Description
+# Instructions:
 
-This is our API to serve the [GoodParty.org](https://goodparty.org) public election pages
+Run the downloader:
 
-## Project setup
-
-```bash
-$ npm install
+```
+npm run download
 ```
 
-Install the [node-gyp](https://github.com/nodejs/node-gyp#on-unix) prerequisites for your operating system
+When the downloader is complete:
+Run the loader:
 
-## Compile and run the project
-
-```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+```
+npm run load
 ```
 
-## Resources
+The downloads are tracked in the VoterFile model and their counts are verified after loading. Only newer files are loaded and appended to. Zip files are deleted and older files are also removed automatically. Any failed downloads are reported to slack.
 
-Check out a few resources that may come in handy when working with NestJS:
+If you need to make any changes to the schema, you simply update the `Voter.prisma` schema
+and then Run the app to copy the schema to the state schemas:
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+```
+npm run copy
+```
 
-### Resources
-https://github.com/kjhealy/fips-codes/tree/master
+Remember that changes to the schema will require you to run migrate and generate (see below).
+
+# Installation:
+
+Install dependencies:
+
+```
+npm install
+```
+
+Copy .env file and update with your DATABASE_URL and other variables.
+
+```
+cp .env.example .env
+```
+
+# Database Setup
+
+If you choose to test with a local database.
+Make sure your postgres user has sufficient permissions (for development only):
+
+```
+CREATE USER username WITH PASSWORD 'password';
+GRANT ALL ON SCHEMA public TO username;
+CREATE DATABASE "dbname" OWNER username;
+GRANT ALL PRIVILEGES ON DATABASE "dbname" TO username;
+ALTER ROLE username CREATEDB;
+```
+
+You must reload configuration on the postgres server after.
+
+# Development:
+
+If you alter the schema you must run migrations.
+
+To Run migrations:
+
+```
+npx prisma migrate dev
+```
+
+Generate the schema:
+
+```
+npx prisma generate
+```
