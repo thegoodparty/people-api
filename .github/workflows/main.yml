@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   push:
-    branches: ['develop', 'qa', 'master']
+    branches: ['develop', 'master']
 
 jobs:
   deploy:
@@ -22,7 +22,7 @@ jobs:
       - name: Run CodeBuild
         uses: aws-actions/aws-codebuild-run-build@v1
         with:
-          project-name: election-api-deploy-build-${{ github.ref_name }}
+          project-name: people-api-deploy-build-${{ github.ref_name }}
 
       - name: Notify Slack on Success
         if: success()
