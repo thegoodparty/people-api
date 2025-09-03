@@ -31,10 +31,10 @@ export default $config({
 
     const apiDomain: string = isProd
       ? 'people-api.goodparty.org'
-      : 'people-api-develop.goodparty.org'
+      : 'people-api-dev.goodparty.org'
     const webAppRootUrl: string = isProd
       ? 'https://goodparty.org'
-      : 'https://develop.goodparty.org'
+      : 'https://dev.goodparty.org'
 
     // function to extract the username, password, and database name from the database url
     // which the docker container needs to run migrations.
