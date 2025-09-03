@@ -159,6 +159,8 @@ export default $config({
         ...secretsJson,
         // Ensure the application uses the voter database URL
         DATABASE_URL: dbUrl ?? '',
+        // Allow localhost during development for manual testing only
+        S2S_ALLOW_LOCALHOST: isDevelop ? 'true' : 'false',
       },
       image: {
         context: '../',
