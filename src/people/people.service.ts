@@ -1,10 +1,6 @@
 import { PrismaService } from 'src/prisma/prisma.service'
 import { ListPeopleDTO } from './people.schema'
-import {
-  BadRequestException,
-  NotFoundException,
-  Injectable,
-} from '@nestjs/common'
+import { BadRequestException, Injectable } from '@nestjs/common'
 
 @Injectable()
 export class PeopleService {
@@ -33,10 +29,6 @@ export class PeopleService {
       model.count({ where }),
       model.findMany({ where, take, skip }),
     ])
-
-    if (totalResults == 0) {
-      throw new NotFoundException('No people found based on those parameters')
-    }
 
     const totalPages = Math.max(1, Math.ceil(totalResults / resultsPerPage))
     const currentPage = Math.min(Math.max(1, page), totalPages)
