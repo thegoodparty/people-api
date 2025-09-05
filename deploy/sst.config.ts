@@ -144,7 +144,7 @@ export default $config({
       memory: isProd ? '4 GB' : '2 GB',
       cpu: isProd ? '1 vCPU' : '0.5 vCPU',
       scaling: {
-        min: isProd ? 2 : isDevelop ? 0 : 1,
+        min: isProd ? 2 : isDevelop ? 1 : 1,
         max: isProd ? 16 : 4,
         cpuUtilization: 50,
         memoryUtilization: 50,
@@ -164,7 +164,7 @@ export default $config({
       },
       image: {
         context: '../',
-        dockerfile: './deploy/Dockerfile',
+        dockerfile: './Dockerfile',
         args: {
           DOCKER_BUILDKIT: '1',
           CACHEBUST: '1',
