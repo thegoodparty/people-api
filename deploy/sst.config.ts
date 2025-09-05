@@ -31,10 +31,10 @@ export default $config({
 
     const apiDomain: string = isProd
       ? 'people-api.goodparty.org'
-      : 'people-api-develop.goodparty.org'
+      : 'people-api-dev.goodparty.org'
     const webAppRootUrl: string = isProd
       ? 'https://goodparty.org'
-      : 'https://develop.goodparty.org'
+      : 'https://dev.goodparty.org'
 
     // function to extract the username, password, and database name from the database url
     // which the docker container needs to run migrations.
@@ -144,7 +144,7 @@ export default $config({
       memory: isProd ? '4 GB' : '2 GB',
       cpu: isProd ? '1 vCPU' : '0.5 vCPU',
       scaling: {
-        min: isProd ? 2 : isDevelop ? 0 : 1,
+        min: isProd ? 2 : isDevelop ? 1 : 1,
         max: isProd ? 16 : 4,
         cpuUtilization: 50,
         memoryUtilization: 50,
@@ -159,6 +159,8 @@ export default $config({
         ...secretsJson,
         // Ensure the application uses the voter database URL
         DATABASE_URL: dbUrl ?? '',
+        // Allow localhost during development for manual testing only
+        S2S_ALLOW_LOCALHOST: isDevelop ? 'true' : 'false',
       },
       image: {
         context: '../',
