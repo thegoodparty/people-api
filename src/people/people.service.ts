@@ -1,4 +1,5 @@
 import { PrismaService } from 'src/prisma/prisma.service'
+import { Prisma } from '@prisma/client'
 import { ListPeopleDTO } from './people.schema'
 import {
   BadRequestException,
@@ -12,18 +13,24 @@ export class PeopleService {
 
   async findPeople(dto: ListPeopleDTO) {
     const { state, districtType, districtName, resultsPerPage, page } = dto
-    const modelKey = `Voter${state.toUpperCase()}`
+    const model = this.prisma.voter
 
-    const prismaAny = this.prisma as any
-    const model = prismaAny[modelKey] ?? prismaAny['voter']
-    if (!model) {
-      throw new BadRequestException(`Unsupported state: ${state}`)
-    }
-
-    // Proper typing of this isn't available since we aren't tied to one table
-    const where: Record<string, unknown> = {}
+    // Strongly-typed where clause for unified Voter table
+    let where: Prisma.VoterWhereInput = { State: state }
     if (districtType && districtName) {
-      where[districtType] = districtName
+      const isValidField = Object.values(Prisma.VoterScalarFieldEnum).includes(
+        districtType as Prisma.VoterScalarFieldEnum,
+      )
+      if (!isValidField) {
+        throw new BadRequestException(
+          `Unsupported districtType: ${districtType}`,
+        )
+      }
+      const key = districtType as keyof Prisma.VoterWhereInput
+      where = {
+        ...where,
+        [key]: { equals: districtName } as unknown,
+      } as Prisma.VoterWhereInput
     }
 
     const take = resultsPerPage
