@@ -54,5 +54,15 @@ Reference for field projection: [gp-api voterFile.util.ts (full projection)](htt
 ### Review (to be completed after implementation)
 
 - Summary of code changes
+  - Added filters/full DTO in `src/people/people.schema.ts`
+  - Added projection map in `src/people/projection.ts` with `buildVoterSelect`
+  - Added filter builder in `src/people/filters.ts` with AND semantics
+  - Wired selection and filters into `PeopleService.findPeople`
+  - Documented params with Swagger in `people.controller.ts`
 - Any deviations from gp-api and why
+  - Party mapping uses simple labels (Dem/Rep/Ind); TODO to align with exact values
+  - Age bucket filters marked TODO to implement with raw SQL casting if needed
+  - Audience filters approximate via performance fields; TODO align precisely with gp-api logic
 - Test cases and sample queries
+  - `/v1/people/list?state=CA&full=true&filters=gender_female&filters=party_democrat&page=1&resultsPerPage=50`
+  - `/v1/people/list?state=NY&districtType=City&districtName=Brooklyn&filters=age_35_50`
