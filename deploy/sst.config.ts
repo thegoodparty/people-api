@@ -164,7 +164,7 @@ export default $config({
       },
       image: {
         context: '../',
-        dockerfile: './Dockerfile',
+        dockerfile: './deploy/Dockerfile',
         args: {
           DOCKER_BUILDKIT: '1',
           CACHEBUST: '1',
