@@ -57,6 +57,7 @@ model Voter {
     Mailing_HHGender_Description           String?   @db.Text() // Cannot Determine,Female Only Household,Male Only Household,Mixed Gender Household
     Mailing_HHParties_Description          String?   @db.Text() // Same as Residence HH Parties calculation but based on those sharing the same mailing address rather than those sharing the same residence address
     Voters_Age                             String?   @db.Text() // Age is based on current year minus year of birth.
+    Voters_Age_Int                         Int?      @db.Integer
     Voters_Gender                          String?   @db.Text() //"M", "F" or blank.
     DateConfidence_Description             String?   @db.Text() // Identifies whether date is complete or is partial and if the latter, which elements are correct.
     Parties_Description                    String?   @db.Text() // Full name of official party. See Parties tab.

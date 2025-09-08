@@ -33,17 +33,11 @@ export class PeopleService {
       }
     }
 
-    const ageIds = await this.findIdsByAgeFilters(
-      state,
-      filters as AllowedFilter[],
-    )
-
     const where = this.buildWhere({
       state,
       districtType: districtType as keyof Prisma.VoterWhereInput | undefined,
       districtName,
-      filters: filters as any,
-      ageIds,
+      filters,
     })
 
     const take = resultsPerPage
@@ -72,7 +66,6 @@ export class PeopleService {
     }
   }
 
-  // Private helpers
   private buildVoterSelect(full: boolean): Prisma.VoterSelect {
     if (full) {
       return {
@@ -123,13 +116,15 @@ export class PeopleService {
     districtType?: keyof Prisma.VoterWhereInput | undefined
     districtName?: string | undefined
     filters: AllowedFilter[]
-    ageIds?: string[]
   }): Prisma.VoterWhereInput {
-    const { state, districtType, districtName, filters, ageIds } = options
+    const { state, districtType, districtName, filters } = options
     const where: Prisma.VoterWhereInput = { State: state }
 
     if (districtType && districtName) {
-      where[districtType] = { equals: districtName } as any
+      // This cast allows us to avoid making a code change every time a new district type is introduced
+      ;(where as Record<string, unknown>)[districtType] = {
+        equals: districtName,
+      }
     }
 
     // genders
@@ -144,20 +139,34 @@ export class PeopleService {
     if (filters.includes('party_democrat')) partyValues.push('Dem')
     if (filters.includes('party_republican')) partyValues.push('Rep')
     if (filters.includes('party_independent')) partyValues.push('Ind')
-    if (partyValues.length)
-      where.Parties_Description = { in: partyValues } as any
+    if (partyValues.length) where.Parties_Description = { in: partyValues }
 
-    // age buckets via pre-fetched ids
-    if (
-      filters.some((f) =>
-        ['age_18_25', 'age_25_35', 'age_35_50', 'age_50_plus'].includes(f),
-      )
-    ) {
-      if (ageIds && ageIds.length) {
-        where.LALVOTERID = { in: ageIds }
-      } else {
-        // no matches
-        where.LALVOTERID = { in: ['__none__'] }
+    // age buckets on indexed integer column
+    const usesAge = filters.some((f) =>
+      ['age_18_25', 'age_25_35', 'age_35_50', 'age_50_plus'].includes(f),
+    )
+    if (usesAge) {
+      type AgeClause = Prisma.VoterWhereInput & {
+        Voters_Age_Int?: Prisma.IntNullableFilter
+      }
+      const ageOr: AgeClause[] = []
+      if (filters.includes('age_18_25'))
+        ageOr.push({ Voters_Age_Int: { gte: 18, lt: 25 } })
+      if (filters.includes('age_25_35'))
+        ageOr.push({ Voters_Age_Int: { gte: 25, lt: 35 } })
+      if (filters.includes('age_35_50'))
+        ageOr.push({ Voters_Age_Int: { gte: 35, lt: 50 } })
+      if (filters.includes('age_50_plus'))
+        ageOr.push({ Voters_Age_Int: { gte: 50 } })
+      if (ageOr.length) {
+        const andClauses: Prisma.VoterWhereInput[] = []
+        if (where.AND) {
+          andClauses.push(
+            ...(Array.isArray(where.AND) ? where.AND : [where.AND]),
+          )
+        }
+        andClauses.push({ OR: ageOr })
+        where.AND = andClauses
       }
     }
 
@@ -166,24 +175,24 @@ export class PeopleService {
     if (filters.includes('audience_superVoters')) {
       turnoutOr.push({
         Voters_VotingPerformanceEvenYearGeneral: { in: ['High'] },
-      } as any)
+      })
     }
     if (filters.includes('audience_likelyVoters')) {
       turnoutOr.push({
         Voters_VotingPerformanceEvenYearGeneral: {
           in: ['Above Average', 'Average'],
         },
-      } as any)
+      })
     }
     if (filters.includes('audience_unreliableVoters')) {
       turnoutOr.push({
         Voters_VotingPerformanceEvenYearGeneral: { in: ['Below Average'] },
-      } as any)
+      })
     }
     if (filters.includes('audience_unlikelyVoters')) {
       turnoutOr.push({
         Voters_VotingPerformanceEvenYearGeneral: { in: ['Low'] },
-      } as any)
+      })
     }
     if (filters.includes('audience_firstTimeVoters')) {
       // TODO align with gp-api precise condition using reg date and history
@@ -193,50 +202,14 @@ export class PeopleService {
       // TODO clarify semantics
     }
     if (turnoutOr.length) {
-      where.AND = [...((where.AND as any[]) || []), { OR: turnoutOr }]
+      const andClauses: Prisma.VoterWhereInput[] = []
+      if (where.AND) {
+        andClauses.push(...(Array.isArray(where.AND) ? where.AND : [where.AND]))
+      }
+      andClauses.push({ OR: turnoutOr })
+      where.AND = andClauses
     }
 
     return where
-  }
-
-  private async findIdsByAgeFilters(
-    state: string,
-    filters: AllowedFilter[],
-  ): Promise<string[] | undefined> {
-    const usesAge = filters.some((f) =>
-      ['age_18_25', 'age_25_35', 'age_35_50', 'age_50_plus'].includes(f),
-    )
-    if (!usesAge) return undefined
-
-    const ranges: { min?: number; max?: number }[] = []
-    if (filters.includes('age_18_25')) ranges.push({ min: 18, max: 25 })
-    if (filters.includes('age_25_35')) ranges.push({ min: 25, max: 35 })
-    if (filters.includes('age_35_50')) ranges.push({ min: 35, max: 50 })
-    if (filters.includes('age_50_plus')) ranges.push({ min: 50 })
-
-    // Build SQL where for ranges; Voters_Age is text, cast to int
-    const clauses: string[] = []
-    const params: any[] = []
-    for (const r of ranges) {
-      if (r.min !== undefined && r.max !== undefined) {
-        clauses.push(
-          '(CAST("Voters_Age" AS INT) >= $1 AND CAST("Voters_Age" AS INT) < $2)',
-        )
-        params.push(r.min, r.max)
-      } else if (r.min !== undefined) {
-        clauses.push('(CAST("Voters_Age" AS INT) >= $1)')
-        params.push(r.min)
-      }
-    }
-    const sql = `SELECT "LALVOTERID" FROM "Voter" WHERE "State" = $${
-      params.length + 1
-    } AND (${clauses.join(' OR ')}) LIMIT 100000`
-    params.push(state)
-
-    // Use $queryRawUnsafe with parameter order
-    const rows = (await this.prisma.$queryRawUnsafe(sql, ...params)) as Array<{
-      LALVOTERID: string
-    }>
-    return rows.map((r) => r.LALVOTERID)
   }
 }
