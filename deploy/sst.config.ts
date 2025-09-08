@@ -114,6 +114,76 @@ export default $config({
       throw new Error('DATABASE_URL, VPC_CIDR keys must be set in the secret.')
     }
 
+    // Create a new Aurora PostgreSQL cluster per stage for People API
+    const clusterIdentifier = isProd ? 'gp-people-db-prod' : 'gp-people-db-dev'
+
+    // Subnet group for the DB (use existing private subnets)
+    const dbSubnetGroup = new aws.rds.SubnetGroup(
+      `people-db-subnets-${$app.stage}`,
+      {
+        subnetIds: ['subnet-053357b931f0524d4', 'subnet-0bb591861f72dcb7f'],
+        tags: { Name: `gp-people-db-${$app.stage}` },
+      },
+    )
+
+    // Security group to allow Postgres from within the VPC CIDR
+    const vpcInfo = aws.ec2.getVpcOutput({ id: 'vpc-0763fa52c32ebcf6a' })
+    const dbSecurityGroup = new aws.ec2.SecurityGroup(
+      `people-db-sg-${$app.stage}`,
+      {
+        vpcId: 'vpc-0763fa52c32ebcf6a',
+        description: 'Allow Postgres access from VPC',
+        ingress: [
+          {
+            protocol: 'tcp',
+            fromPort: 5432,
+            toPort: 5432,
+            cidrBlocks: [vpcInfo.cidrBlock],
+          },
+        ],
+        egress: [
+          {
+            protocol: '-1',
+            fromPort: 0,
+            toPort: 0,
+            cidrBlocks: ['0.0.0.0/0'],
+          },
+        ],
+        tags: { Name: `gp-people-db-${$app.stage}` },
+      },
+    )
+
+    const peopleDbCluster = new aws.rds.Cluster(
+      `people-db-cluster-${$app.stage}`,
+      {
+        clusterIdentifier,
+        engine: 'aurora-postgresql',
+        engineMode: 'provisioned',
+        masterUsername: dbUser!,
+        masterPassword: dbPassword!,
+        databaseName: dbName!,
+        dbSubnetGroupName: dbSubnetGroup.name,
+        vpcSecurityGroupIds: [dbSecurityGroup.id],
+        backupRetentionPeriod: isProd ? 7 : 1,
+        preferredBackupWindow: '07:00-09:00',
+        storageEncrypted: true,
+      },
+    )
+
+    const instanceCount = isProd ? 2 : 1
+    for (let i = 0; i < instanceCount; i++) {
+      new aws.rds.ClusterInstance(`people-db-instance-${$app.stage}-${i + 1}`, {
+        clusterIdentifier: peopleDbCluster.id,
+        engine: 'aurora-postgresql',
+        instanceClass: isProd ? 'db.r6g.large' : 'db.t4g.medium',
+        publiclyAccessible: false,
+        dbSubnetGroupName: dbSubnetGroup.name,
+      })
+    }
+
+    // Build the DATABASE_URL using the new cluster endpoint
+    const peopleDbUrl = pulumi.interpolate`postgresql://${dbUser}:${dbPassword}@${peopleDbCluster.endpoint}:5432/${dbName}`
+
     new sst.aws.Service(`people-api-${$app.stage}`, {
       cluster,
       loadBalancer: {
@@ -157,8 +227,8 @@ export default $config({
         AWS_REGION: 'us-west-2',
         WEBAPP_ROOT_URL: webAppRootUrl,
         ...secretsJson,
-        // Ensure the application uses the voter database URL
-        DATABASE_URL: dbUrl ?? '',
+        // Ensure the application uses the new people database URL
+        DATABASE_URL: peopleDbUrl,
         // Allow localhost during development for manual testing only
         S2S_ALLOW_LOCALHOST: isDevelop ? 'true' : 'false',
       },
@@ -168,7 +238,7 @@ export default $config({
         args: {
           DOCKER_BUILDKIT: '1',
           CACHEBUST: '1',
-          DATABASE_URL: dbUrl ?? '',
+          DATABASE_URL: peopleDbUrl,
           STAGE: $app.stage,
         },
       },
@@ -178,10 +248,6 @@ export default $config({
         },
       },
     })
-
-    // Reference the existing swap voter DB cluster only (no creation here)
-    const swapClusterIdentifier = 'gp-voter-db-20250728'
-    aws.rds.Cluster.get('swapVoterCluster', swapClusterIdentifier)
 
     const codeBuildRole = new aws.iam.Role('codebuild-service-role', {
       assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({
