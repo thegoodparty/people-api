@@ -60,6 +60,7 @@ export default $config({
     let dbName: string | undefined
     let dbUser: string | undefined
     let dbPassword: string | undefined
+    let vpcCidr: string | undefined
 
     // Fetch the JSON secret using Pulumi's AWS SDK
     let secretArn: string | undefined
@@ -93,6 +94,9 @@ export default $config({
             dbName = database
             dbUser = username
             dbPassword = password
+          }
+          if (key === 'VPC_CIDR') {
+            vpcCidr = value as string
           }
           secrets.push({ key: value })
         }
@@ -130,7 +134,7 @@ export default $config({
             protocol: 'tcp',
             fromPort: 5432,
             toPort: 5432,
-            cidrBlocks: [vpcInfo.cidrBlock],
+            cidrBlocks: [vpcInfo.cidrBlock, vpcCidr!],
           },
         ],
         egress: [
