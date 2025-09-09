@@ -138,7 +138,7 @@ export default $config({
             protocol: 'tcp',
             fromPort: 5432,
             toPort: 5432,
-            cidrBlocks: [vpcInfo.cidrBlock],
+            cidrBlocks: [vpcInfo.cidrBlock, vpcCidr!],
           },
         ],
         egress: [
