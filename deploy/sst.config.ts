@@ -64,12 +64,10 @@ export default $config({
     // Fetch the JSON secret using Pulumi's AWS SDK
     let secretArn: string | undefined
 
-    // Stage-specific secret selection
     if (isProd) {
       secretArn =
         'arn:aws:secretsmanager:us-west-2:333022194791:secret:GP_PEOPLE_API_PROD-tXhM8a'
     } else if (isDevelop) {
-      // Optionally provide the develop secret ARN via environment variable
       secretArn =
         'arn:aws:secretsmanager:us-west-2:333022194791:secret:PEOPLE_API_DEV-3oNjn3'
     }
@@ -81,7 +79,6 @@ export default $config({
         secretId: secretArn,
       })
 
-      // Use async/await to get the actual secret value
       const secretString = await secretVersion.then((v) => v.secretString)
 
       try {
@@ -106,82 +103,89 @@ export default $config({
       }
     }
 
-    // Require credentials for both prod and develop to avoid undefined non-null assertions
     if (!dbName || !dbUser || !dbPassword || !dbUrl) {
       throw new Error(
         'DATABASE_URL must include user, password, and database name.',
       )
     }
 
-    // Create a new Aurora PostgreSQL cluster per stage for People API
     const clusterIdentifier = isProd ? 'gp-people-db-prod' : 'gp-people-db-dev'
 
-    // Subnet group for the DB (use existing private subnets)
-    const dbSubnetGroup = new aws.rds.SubnetGroup(
-      `people-db-subnets-${$app.stage}`,
-      {
-        subnetIds: ['subnet-053357b931f0524d4', 'subnet-0bb591861f72dcb7f'],
-        tags: { Name: `gp-people-db-${$app.stage}` },
-      },
-    )
+    let endpointOutput: any
+    try {
+      const existing = await aws.rds.getCluster({ clusterIdentifier })
+      endpointOutput = existing.endpoint
+    } catch {
+      const dbSubnetGroup = new aws.rds.SubnetGroup(
+        `people-db-subnets-${$app.stage}`,
+        {
+          subnetIds: ['subnet-053357b931f0524d4', 'subnet-0bb591861f72dcb7f'],
+          tags: { Name: `gp-people-db-${$app.stage}` },
+        },
+      )
 
-    // Security group to allow Postgres from within the VPC CIDR
-    const vpcInfo = aws.ec2.getVpcOutput({ id: 'vpc-0763fa52c32ebcf6a' })
-    const dbSecurityGroup = new aws.ec2.SecurityGroup(
-      `people-db-sg-${$app.stage}`,
-      {
-        vpcId: 'vpc-0763fa52c32ebcf6a',
-        description: 'Allow Postgres access from VPC',
-        ingress: [
+      const vpcInfo = aws.ec2.getVpcOutput({ id: 'vpc-0763fa52c32ebcf6a' })
+      const dbSecurityGroup = new aws.ec2.SecurityGroup(
+        `people-db-sg-${$app.stage}`,
+        {
+          vpcId: 'vpc-0763fa52c32ebcf6a',
+          description: 'Allow Postgres access from VPC',
+          ingress: [
+            {
+              protocol: 'tcp',
+              fromPort: 5432,
+              toPort: 5432,
+              cidrBlocks: [vpcInfo.cidrBlock],
+            },
+          ],
+          egress: [
+            {
+              protocol: '-1',
+              fromPort: 0,
+              toPort: 0,
+              cidrBlocks: ['0.0.0.0/0'],
+            },
+          ],
+          tags: { Name: `gp-people-db-${$app.stage}` },
+        },
+      )
+
+      const peopleDbCluster = new aws.rds.Cluster(
+        `people-db-cluster-${$app.stage}`,
+        {
+          clusterIdentifier,
+          engine: 'aurora-postgresql',
+          engineMode: 'provisioned',
+          masterUsername: dbUser!,
+          masterPassword: dbPassword!,
+          databaseName: dbName!,
+          dbSubnetGroupName: dbSubnetGroup.name,
+          vpcSecurityGroupIds: [dbSecurityGroup.id],
+          backupRetentionPeriod: isProd ? 7 : 1,
+          preferredBackupWindow: '07:00-09:00',
+          storageEncrypted: true,
+        },
+      )
+
+      const instanceCount = isProd ? 2 : 1
+      for (let i = 0; i < instanceCount; i++) {
+        new aws.rds.ClusterInstance(
+          `people-db-instance-${$app.stage}-${i + 1}`,
           {
-            protocol: 'tcp',
-            fromPort: 5432,
-            toPort: 5432,
-            cidrBlocks: [vpcInfo.cidrBlock],
+            clusterIdentifier: peopleDbCluster.id,
+            engine: 'aurora-postgresql',
+            instanceClass: isProd ? 'db.r6g.large' : 'db.t4g.medium',
+            publiclyAccessible: false,
+            dbSubnetGroupName: dbSubnetGroup.name,
           },
-        ],
-        egress: [
-          {
-            protocol: '-1',
-            fromPort: 0,
-            toPort: 0,
-            cidrBlocks: ['0.0.0.0/0'],
-          },
-        ],
-        tags: { Name: `gp-people-db-${$app.stage}` },
-      },
-    )
+        )
+      }
 
-    const peopleDbCluster = new aws.rds.Cluster(
-      `people-db-cluster-${$app.stage}`,
-      {
-        clusterIdentifier,
-        engine: 'aurora-postgresql',
-        engineMode: 'provisioned',
-        masterUsername: dbUser!,
-        masterPassword: dbPassword!,
-        databaseName: dbName!,
-        dbSubnetGroupName: dbSubnetGroup.name,
-        vpcSecurityGroupIds: [dbSecurityGroup.id],
-        backupRetentionPeriod: isProd ? 7 : 1,
-        preferredBackupWindow: '07:00-09:00',
-        storageEncrypted: true,
-      },
-    )
-
-    const instanceCount = isProd ? 2 : 1
-    for (let i = 0; i < instanceCount; i++) {
-      new aws.rds.ClusterInstance(`people-db-instance-${$app.stage}-${i + 1}`, {
-        clusterIdentifier: peopleDbCluster.id,
-        engine: 'aurora-postgresql',
-        instanceClass: isProd ? 'db.r6g.large' : 'db.t4g.medium',
-        publiclyAccessible: false,
-        dbSubnetGroupName: dbSubnetGroup.name,
-      })
+      endpointOutput = peopleDbCluster.endpoint
     }
 
-    // Build the DATABASE_URL using the new cluster endpoint
-    const peopleDbUrl = pulumi.interpolate`postgresql://${dbUser}:${dbPassword}@${peopleDbCluster.endpoint}:5432/${dbName}`
+    // Build the DATABASE_URL using the cluster endpoint
+    const peopleDbUrl = pulumi.interpolate`postgresql://${dbUser}:${dbPassword}@${endpointOutput}:5432/${dbName}`
 
     new sst.aws.Service(`people-api-${$app.stage}`, {
       cluster,
@@ -213,7 +217,7 @@ export default $config({
       memory: isProd ? '4 GB' : '2 GB',
       cpu: isProd ? '1 vCPU' : '0.5 vCPU',
       scaling: {
-        min: isProd ? 2 : isDevelop ? 1 : 1,
+        min: isProd ? 2 : isDevelop ? 0 : 1,
         max: isProd ? 16 : 4,
         cpuUtilization: 50,
         memoryUtilization: 50,
