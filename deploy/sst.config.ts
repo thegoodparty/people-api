@@ -111,62 +111,63 @@ export default $config({
 
     const clusterIdentifier = isProd ? 'gp-people-db-prod' : 'gp-people-db-dev'
 
-    let endpointOutput: any
+    // Always declare network resources so Pulumi does not delete them between runs
+    const dbSubnetGroup = new aws.rds.SubnetGroup(
+      `people-db-subnets-${$app.stage}`,
+      {
+        subnetIds: ['subnet-053357b931f0524d4', 'subnet-0bb591861f72dcb7f'],
+        tags: { Name: `gp-people-db-${$app.stage}` },
+      },
+    )
+    const vpcInfo = aws.ec2.getVpcOutput({ id: 'vpc-0763fa52c32ebcf6a' })
+    const dbSecurityGroup = new aws.ec2.SecurityGroup(
+      `people-db-sg-${$app.stage}`,
+      {
+        vpcId: 'vpc-0763fa52c32ebcf6a',
+        description: 'Allow Postgres access from VPC',
+        ingress: [
+          {
+            protocol: 'tcp',
+            fromPort: 5432,
+            toPort: 5432,
+            cidrBlocks: [vpcInfo.cidrBlock],
+          },
+        ],
+        egress: [
+          { protocol: '-1', fromPort: 0, toPort: 0, cidrBlocks: ['0.0.0.0/0'] },
+        ],
+        tags: { Name: `gp-people-db-${$app.stage}` },
+      },
+    )
+
+    // Try adopt existing cluster into state; otherwise create
+    let peopleDbCluster: aws.rds.Cluster
+    let clusterExists = false
     try {
-      const existing = await aws.rds.getCluster({ clusterIdentifier })
-      endpointOutput = existing.endpoint
-    } catch {
-      const dbSubnetGroup = new aws.rds.SubnetGroup(
-        `people-db-subnets-${$app.stage}`,
-        {
-          subnetIds: ['subnet-053357b931f0524d4', 'subnet-0bb591861f72dcb7f'],
-          tags: { Name: `gp-people-db-${$app.stage}` },
-        },
-      )
+      await aws.rds.getCluster({ clusterIdentifier })
+      clusterExists = true
+    } catch {}
 
-      const vpcInfo = aws.ec2.getVpcOutput({ id: 'vpc-0763fa52c32ebcf6a' })
-      const dbSecurityGroup = new aws.ec2.SecurityGroup(
-        `people-db-sg-${$app.stage}`,
-        {
-          vpcId: 'vpc-0763fa52c32ebcf6a',
-          description: 'Allow Postgres access from VPC',
-          ingress: [
-            {
-              protocol: 'tcp',
-              fromPort: 5432,
-              toPort: 5432,
-              cidrBlocks: [vpcInfo.cidrBlock],
-            },
-          ],
-          egress: [
-            {
-              protocol: '-1',
-              fromPort: 0,
-              toPort: 0,
-              cidrBlocks: ['0.0.0.0/0'],
-            },
-          ],
-          tags: { Name: `gp-people-db-${$app.stage}` },
-        },
-      )
-
-      const peopleDbCluster = new aws.rds.Cluster(
+    if (clusterExists) {
+      peopleDbCluster = aws.rds.Cluster.get(
         `people-db-cluster-${$app.stage}`,
-        {
-          clusterIdentifier,
-          engine: 'aurora-postgresql',
-          engineMode: 'provisioned',
-          masterUsername: dbUser!,
-          masterPassword: dbPassword!,
-          databaseName: dbName!,
-          dbSubnetGroupName: dbSubnetGroup.name,
-          vpcSecurityGroupIds: [dbSecurityGroup.id],
-          backupRetentionPeriod: isProd ? 7 : 1,
-          preferredBackupWindow: '07:00-09:00',
-          storageEncrypted: true,
-        },
+        clusterIdentifier,
       )
-
+    } else {
+      peopleDbCluster = new aws.rds.Cluster(`people-db-cluster-${$app.stage}`, {
+        clusterIdentifier,
+        engine: 'aurora-postgresql',
+        engineMode: 'provisioned',
+        masterUsername: dbUser!,
+        masterPassword: dbPassword!,
+        databaseName: dbName!,
+        dbSubnetGroupName: dbSubnetGroup.name,
+        vpcSecurityGroupIds: [dbSecurityGroup.id],
+        backupRetentionPeriod: isProd ? 7 : 1,
+        preferredBackupWindow: '07:00-09:00',
+        storageEncrypted: true,
+        skipFinalSnapshot: isDevelop ? true : undefined,
+      })
       const instanceCount = isProd ? 2 : 1
       for (let i = 0; i < instanceCount; i++) {
         new aws.rds.ClusterInstance(
@@ -180,12 +181,9 @@ export default $config({
           },
         )
       }
-
-      endpointOutput = peopleDbCluster.endpoint
     }
 
-    // Build the DATABASE_URL using the cluster endpoint
-    const peopleDbUrl = pulumi.interpolate`postgresql://${dbUser}:${dbPassword}@${endpointOutput}:5432/${dbName}`
+    const peopleDbUrl = pulumi.interpolate`postgresql://${dbUser}:${dbPassword}@${peopleDbCluster.endpoint}:5432/${dbName}`
 
     new sst.aws.Service(`people-api-${$app.stage}`, {
       cluster,
