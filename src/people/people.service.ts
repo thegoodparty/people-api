@@ -136,9 +136,10 @@ export class PeopleService {
 
     // parties (TODO verify exact strings)
     const partyValues: string[] = []
-    if (filters.includes('party_democrat')) partyValues.push('Dem')
-    if (filters.includes('party_republican')) partyValues.push('Rep')
-    if (filters.includes('party_independent')) partyValues.push('Ind')
+    if (filters.includes('party_democrat')) partyValues.push('Democratic')
+    if (filters.includes('party_republican')) partyValues.push('Republican')
+    if (filters.includes('party_independent'))
+      partyValues.push('Non-Partisan', 'Other')
     if (partyValues.length) where.Parties_Description = { in: partyValues }
 
     // age buckets on indexed integer column
@@ -151,13 +152,13 @@ export class PeopleService {
       }
       const ageOr: AgeClause[] = []
       if (filters.includes('age_18_25'))
-        ageOr.push({ Voters_Age_Int: { gte: 18, lt: 25 } })
+        ageOr.push({ Voters_Age_Int: { gte: 18, lte: 25 } })
       if (filters.includes('age_25_35'))
-        ageOr.push({ Voters_Age_Int: { gte: 25, lt: 35 } })
+        ageOr.push({ Voters_Age_Int: { gt: 25, lte: 35 } })
       if (filters.includes('age_35_50'))
-        ageOr.push({ Voters_Age_Int: { gte: 35, lt: 50 } })
+        ageOr.push({ Voters_Age_Int: { gt: 35, lte: 50 } })
       if (filters.includes('age_50_plus'))
-        ageOr.push({ Voters_Age_Int: { gte: 50 } })
+        ageOr.push({ Voters_Age_Int: { gt: 50 } })
       if (ageOr.length) {
         const andClauses: Prisma.VoterWhereInput[] = []
         if (where.AND) {
@@ -195,11 +196,20 @@ export class PeopleService {
       })
     }
     if (filters.includes('audience_firstTimeVoters')) {
-      // TODO align with gp-api precise condition using reg date and history
-      where.Voters_OfficialRegDate = { not: null }
+      // Match gp-api: treat no voting performance as first-time
+      turnoutOr.push({
+        OR: [
+          {
+            Voters_VotingPerformanceEvenYearGeneral: {
+              in: ['0%', 'Not Eligible', ''],
+            },
+          },
+          { Voters_VotingPerformanceEvenYearGeneral: null },
+        ],
+      })
     }
     if (filters.includes('audience_request')) {
-      // TODO clarify semantics
+      // no-op by design
     }
     if (turnoutOr.length) {
       const andClauses: Prisma.VoterWhereInput[] = []
