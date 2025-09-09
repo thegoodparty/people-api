@@ -107,15 +107,13 @@ export default $config({
       }
     }
 
-    if (!dbName || !dbUser || !dbPassword || !dbUrl) {
-      throw new Error(
-        'DATABASE_URL must include user, password, and database name.',
-      )
+    if (!dbName || !dbUser || !dbPassword || !dbUrl || !vpcCidr) {
+      throw new Error('DATABASE_URL, VPC_CIDR keys must be set in the secret.')
     }
 
     const clusterIdentifier = isProd ? 'gp-people-db-prod' : 'gp-people-db-dev'
 
-    // Always declare network resources so Pulumi does not delete them between runs
+    // Always declare subnet group so Pulumi does not delete it between runs
     const dbSubnetGroup = new aws.rds.SubnetGroup(
       `people-db-subnets-${$app.stage}`,
       {
@@ -123,26 +121,11 @@ export default $config({
         tags: { Name: `gp-people-db-${$app.stage}` },
       },
     )
-    const vpcInfo = aws.ec2.getVpcOutput({ id: 'vpc-0763fa52c32ebcf6a' })
-    const dbSecurityGroup = new aws.ec2.SecurityGroup(
-      `people-db-sg-${$app.stage}`,
-      {
-        vpcId: 'vpc-0763fa52c32ebcf6a',
-        description: 'Allow Postgres access from VPC',
-        ingress: [
-          {
-            protocol: 'tcp',
-            fromPort: 5432,
-            toPort: 5432,
-            cidrBlocks: [vpcInfo.cidrBlock, vpcCidr!],
-          },
-        ],
-        egress: [
-          { protocol: '-1', fromPort: 0, toPort: 0, cidrBlocks: ['0.0.0.0/0'] },
-        ],
-        tags: { Name: `gp-people-db-${$app.stage}` },
-      },
-    )
+
+    // Use existing SGs like election-api for DB access
+    const existingDbSgId = isProd
+      ? 'sg-03783e4adbbee87dc'
+      : 'sg-0b834a3f7b64950d0'
 
     // Try adopt existing cluster into state; otherwise create
     let peopleDbCluster: aws.rds.Cluster
@@ -166,7 +149,7 @@ export default $config({
         masterPassword: dbPassword!,
         databaseName: dbName!,
         dbSubnetGroupName: dbSubnetGroup.name,
-        vpcSecurityGroupIds: [dbSecurityGroup.id],
+        vpcSecurityGroupIds: [existingDbSgId],
         backupRetentionPeriod: isProd ? 7 : 1,
         preferredBackupWindow: '07:00-09:00',
         storageEncrypted: true,
