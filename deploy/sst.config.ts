@@ -127,10 +127,11 @@ export default $config({
         description: 'Allow Postgres access from VPC',
         ingress: [
           {
-            protocol: 'tcp',
-            fromPort: 5432,
-            toPort: 5432,
-            cidrBlocks: [vpcInfo.cidrBlock],
+            clusterIdentifier: peopleDbCluster.id,
+            engine: 'aurora-postgresql',
+            instanceClass: isProd ? 'db.r6g.large' : 'db.t4g.medium',
+            publiclyAccessible: false,
+            dbSubnetGroupName: dbSubnetGroup.name,
           },
         ],
         egress: [
