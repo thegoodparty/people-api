@@ -19,6 +19,7 @@ export default $config({
   },
   async run() {
     const aws = await import('@pulumi/aws')
+    const codebuild = await import('@pulumi/aws/codebuild')
     const pulumi = await import('@pulumi/pulumi')
     const vpc = sst.aws.Vpc.get('api', 'vpc-0763fa52c32ebcf6a')
 
@@ -50,7 +51,7 @@ export default $config({
     const cluster = new sst.aws.Cluster('fargate', {
       vpc,
       transform: {
-        cluster: (clusterArgs, opts, name) => {
+        cluster: (clusterArgs, _opts, _name) => {
           clusterArgs.name = `people-api-${$app.stage}-fargateCluster`
         },
       },
@@ -247,53 +248,63 @@ export default $config({
       },
     })
 
-    const codeBuildRole = new aws.iam.Role('codebuild-service-role', {
-      assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({
-        Service: 'codebuild.amazonaws.com',
-      }),
-      managedPolicyArns: ['arn:aws:iam::aws:policy/AdministratorAccess'],
-    })
+    // CodeBuild role: adopt if it exists, otherwise create
+    let codeBuildRole: aws.iam.Role
+    try {
+      const existing = await aws.iam.getRole({ name: 'codebuild-service-role' })
+      codeBuildRole = aws.iam.Role.get('codebuild-service-role', existing.arn)
+    } catch {
+      codeBuildRole = new aws.iam.Role('codebuild-service-role', {
+        assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({
+          Service: 'codebuild.amazonaws.com',
+        }),
+        managedPolicyArns: ['arn:aws:iam::aws:policy/AdministratorAccess'],
+      })
+    }
 
-    new aws.codebuild.Project('people-api-deploy-build', {
-      name: `people-api-deploy-build-${$app.stage}`,
-      serviceRole: codeBuildRole.arn,
-      environment: {
-        computeType: 'BUILD_GENERAL1_LARGE',
-        image: 'aws/codebuild/standard:6.0',
-        type: 'LINUX_CONTAINER',
-        privilegedMode: true,
-        environmentVariables: [
-          {
-            name: 'STAGE',
-            value: $app.stage,
-            type: 'PLAINTEXT',
-          },
-          {
-            name: 'CLUSTER_NAME',
-            value: `people-api-${$app.stage}-fargateCluster`,
-            type: 'PLAINTEXT',
-          },
-          {
-            name: 'SERVICE_NAME',
-            value: `people-api-${$app.stage}`,
-            type: 'PLAINTEXT',
-          },
-        ],
-      },
-      vpcConfig: {
-        vpcId: 'vpc-0763fa52c32ebcf6a',
-        subnets: ['subnet-053357b931f0524d4', 'subnet-0bb591861f72dcb7f'],
-        securityGroupIds: ['sg-01de8d67b0f0ec787'],
-      },
-      source: {
-        type: 'GITHUB',
-        location: 'https://github.com/thegoodparty/people-api.git',
-        buildspec: 'deploy/buildspec.yml',
-      },
-      artifacts: {
-        type: 'NO_ARTIFACTS',
-      },
-    })
+    // CodeBuild project: adopt if it exists, otherwise create
+    const projectName = `people-api-deploy-build-${$app.stage}`
+    try {
+      const existingProject = await (aws as any).codebuild.getProject({
+        name: projectName,
+      })
+      codebuild.Project.get('people-api-deploy-build', existingProject.arn)
+    } catch {
+      new codebuild.Project('people-api-deploy-build', {
+        name: projectName,
+        serviceRole: codeBuildRole.arn,
+        environment: {
+          computeType: 'BUILD_GENERAL1_LARGE',
+          image: 'aws/codebuild/standard:6.0',
+          type: 'LINUX_CONTAINER',
+          privilegedMode: true,
+          environmentVariables: [
+            { name: 'STAGE', value: $app.stage, type: 'PLAINTEXT' },
+            {
+              name: 'CLUSTER_NAME',
+              value: `people-api-${$app.stage}-fargateCluster`,
+              type: 'PLAINTEXT',
+            },
+            {
+              name: 'SERVICE_NAME',
+              value: `people-api-${$app.stage}`,
+              type: 'PLAINTEXT',
+            },
+          ],
+        },
+        vpcConfig: {
+          vpcId: 'vpc-0763fa52c32ebcf6a',
+          subnets: ['subnet-053357b931f0524d4', 'subnet-0bb591861f72dcb7f'],
+          securityGroupIds: ['sg-01de8d67b0f0ec787'],
+        },
+        source: {
+          type: 'GITHUB',
+          location: 'https://github.com/thegoodparty/people-api.git',
+          buildspec: 'deploy/buildspec.yml',
+        },
+        artifacts: { type: 'NO_ARTIFACTS' },
+      })
+    }
 
     new aws.iam.Policy('github-actions-policy', {
       description: 'Limited policy for Github Actions to trigger CodeBuild',
