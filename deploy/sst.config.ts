@@ -113,11 +113,14 @@ export default $config({
 
     const clusterIdentifier = isProd ? 'gp-people-db-prod' : 'gp-people-db-dev'
 
-    // Align with election-api: use existing subnet group by name
-    const subnetGroupName = isDevelop
-      ? 'api-rds-subnet-group'
-      : `api-${$app.stage}-rds-subnet-group`
-    const subnetGroup = await aws.rds.getSubnetGroup({ name: subnetGroupName })
+    // Keep managing the existing Subnet Group resource so Pulumi/SST does not attempt deletion
+    const dbSubnetGroup = new aws.rds.SubnetGroup(
+      `people-db-subnets-${$app.stage}`,
+      {
+        subnetIds: ['subnet-053357b931f0524d4', 'subnet-0bb591861f72dcb7f'],
+        tags: { Name: `gp-people-db-${$app.stage}` },
+      },
+    )
 
     // Use election-api style RDS Security Group resolution
     let rdsSecurityGroupName: string
@@ -158,7 +161,7 @@ export default $config({
         masterUsername: dbUser!,
         masterPassword: dbPassword!,
         databaseName: dbName!,
-        dbSubnetGroupName: subnetGroup.name,
+        dbSubnetGroupName: dbSubnetGroup.name,
         vpcSecurityGroupIds: [rdsSecurityGroup.id],
         backupRetentionPeriod: isProd ? 7 : 1,
         preferredBackupWindow: '07:00-09:00',
@@ -174,7 +177,7 @@ export default $config({
             engine: 'aurora-postgresql',
             instanceClass: isProd ? 'db.r6g.large' : 'db.t4g.medium',
             publiclyAccessible: false,
-            dbSubnetGroupName: subnetGroup.name,
+            dbSubnetGroupName: dbSubnetGroup.name,
           },
         )
       }
