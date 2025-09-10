@@ -67,7 +67,7 @@ export default $config({
 
     if (isProd) {
       secretArn =
-        'arn:aws:secretsmanager:us-west-2:333022194791:secret:GP_PEOPLE_API_PROD-tXhM8a'
+        'arn:aws:secretsmanager:us-west-2:333022194791:secret:PEOPLE_API_PROD-7dFZbr'
     } else if (isDevelop) {
       secretArn =
         'arn:aws:secretsmanager:us-west-2:333022194791:secret:PEOPLE_API_DEV-3oNjn3'
