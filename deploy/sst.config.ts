@@ -205,7 +205,7 @@ export default $config({
           }
         : isDevelop
           ? {
-              spot: { weight: 1, base: 0 },
+              spot: { weight: 1, base: 1 },
             }
           : {
               spot: { weight: 1, base: 1 },
@@ -213,7 +213,7 @@ export default $config({
       memory: isProd ? '4 GB' : '2 GB',
       cpu: isProd ? '1 vCPU' : '0.5 vCPU',
       scaling: {
-        min: isProd ? 2 : isDevelop ? 0 : 1,
+        min: isProd ? 2 : isDevelop ? 1 : 1,
         max: isProd ? 16 : 4,
         cpuUtilization: 50,
         memoryUtilization: 50,
