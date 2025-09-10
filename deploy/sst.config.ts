@@ -19,7 +19,7 @@ export default $config({
   },
   async run() {
     const aws = await import('@pulumi/aws')
-    const codebuild = await import('@pulumi/aws/codebuild')
+    const codebuild: any = await import('@pulumi/aws/codebuild/index.js')
     const pulumi = await import('@pulumi/pulumi')
     const vpc = sst.aws.Vpc.get('api', 'vpc-0763fa52c32ebcf6a')
 
@@ -252,7 +252,7 @@ export default $config({
     let codeBuildRole: aws.iam.Role
     try {
       const existing = await aws.iam.getRole({ name: 'codebuild-service-role' })
-      codeBuildRole = aws.iam.Role.get('codebuild-service-role', existing.arn)
+      codeBuildRole = aws.iam.Role.get('codebuild-service-role', existing.name)
     } catch {
       codeBuildRole = new aws.iam.Role('codebuild-service-role', {
         assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({
@@ -265,10 +265,10 @@ export default $config({
     // CodeBuild project: adopt if it exists, otherwise create
     const projectName = `people-api-deploy-build-${$app.stage}`
     try {
-      const existingProject = await (aws as any).codebuild.getProject({
+      const existingProject = await codebuild.getProject({
         name: projectName,
       })
-      codebuild.Project.get('people-api-deploy-build', existingProject.arn)
+      codebuild.Project.get('people-api-deploy-build', existingProject.name)
     } catch {
       new codebuild.Project('people-api-deploy-build', {
         name: projectName,
