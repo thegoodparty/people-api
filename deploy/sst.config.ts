@@ -65,12 +65,10 @@ export default $config({
     // Fetch the JSON secret using Pulumi's AWS SDK
     let secretArn: string | undefined
 
-    // Stage-specific secret selection
     if (isProd) {
       secretArn =
         'arn:aws:secretsmanager:us-west-2:333022194791:secret:GP_PEOPLE_API_PROD-tXhM8a'
     } else if (isDevelop) {
-      // Optionally provide the develop secret ARN via environment variable
       secretArn =
         'arn:aws:secretsmanager:us-west-2:333022194791:secret:PEOPLE_API_DEV-3oNjn3'
     }
@@ -82,7 +80,6 @@ export default $config({
         secretId: secretArn,
       })
 
-      // Use async/await to get the actual secret value
       const secretString = await secretVersion.then((v) => v.secretString)
 
       try {
@@ -110,8 +107,80 @@ export default $config({
       }
     }
 
-    if (isProd && (!dbName || !dbUser || !dbPassword || !vpcCidr || !dbUrl)) {
+    if (!dbName || !dbUser || !dbPassword || !dbUrl || !vpcCidr) {
       throw new Error('DATABASE_URL, VPC_CIDR keys must be set in the secret.')
+    }
+
+    const clusterIdentifier = isProd ? 'gp-people-db-prod' : 'gp-people-db-dev'
+
+    // Keep managing the existing Subnet Group resource so Pulumi/SST does not attempt deletion
+    const dbSubnetGroup = new aws.rds.SubnetGroup(
+      `people-db-subnets-${$app.stage}`,
+      {
+        subnetIds: ['subnet-053357b931f0524d4', 'subnet-0bb591861f72dcb7f'],
+        tags: { Name: `gp-people-db-${$app.stage}` },
+      },
+    )
+
+    // Use election-api style RDS Security Group resolution
+    let rdsSecurityGroupName: string
+    let rdsSecurityGroupId: string
+    if (isDevelop) {
+      rdsSecurityGroupName = 'api-rds-security-group'
+      rdsSecurityGroupId = 'sg-0b834a3f7b64950d0'
+    } else if (isProd) {
+      rdsSecurityGroupName = 'api-master-rds-security-group'
+      rdsSecurityGroupId = 'sg-03783e4adbbee87dc'
+    } else {
+      throw new Error('Unrecognized app stage')
+    }
+
+    const rdsSecurityGroup = aws.ec2.SecurityGroup.get(
+      rdsSecurityGroupName,
+      rdsSecurityGroupId,
+    )
+
+    // Try adopt existing cluster into state; otherwise create
+    let peopleDbCluster: aws.rds.Cluster
+    let clusterExists = false
+    try {
+      await aws.rds.getCluster({ clusterIdentifier })
+      clusterExists = true
+    } catch {}
+
+    if (clusterExists) {
+      peopleDbCluster = aws.rds.Cluster.get(
+        `people-db-cluster-${$app.stage}`,
+        clusterIdentifier,
+      )
+    } else {
+      peopleDbCluster = new aws.rds.Cluster(`people-db-cluster-${$app.stage}`, {
+        clusterIdentifier,
+        engine: 'aurora-postgresql',
+        engineMode: 'provisioned',
+        masterUsername: dbUser!,
+        masterPassword: dbPassword!,
+        databaseName: dbName!,
+        dbSubnetGroupName: dbSubnetGroup.name,
+        vpcSecurityGroupIds: [rdsSecurityGroup.id],
+        backupRetentionPeriod: isProd ? 7 : 1,
+        preferredBackupWindow: '07:00-09:00',
+        storageEncrypted: true,
+        skipFinalSnapshot: isDevelop ? true : undefined,
+      })
+      const instanceCount = isProd ? 2 : 1
+      for (let i = 0; i < instanceCount; i++) {
+        new aws.rds.ClusterInstance(
+          `people-db-instance-${$app.stage}-${i + 1}`,
+          {
+            clusterIdentifier: peopleDbCluster.id,
+            engine: 'aurora-postgresql',
+            instanceClass: isProd ? 'db.r6g.large' : 'db.t4g.medium',
+            publiclyAccessible: false,
+            dbSubnetGroupName: dbSubnetGroup.name,
+          },
+        )
+      }
     }
 
     new sst.aws.Service(`people-api-${$app.stage}`, {
@@ -136,7 +205,7 @@ export default $config({
           }
         : isDevelop
           ? {
-              spot: { weight: 1, base: 0 },
+              spot: { weight: 1, base: 1 },
             }
           : {
               spot: { weight: 1, base: 1 },
@@ -157,8 +226,6 @@ export default $config({
         AWS_REGION: 'us-west-2',
         WEBAPP_ROOT_URL: webAppRootUrl,
         ...secretsJson,
-        // Ensure the application uses the voter database URL
-        DATABASE_URL: dbUrl ?? '',
         // Allow localhost during development for manual testing only
         S2S_ALLOW_LOCALHOST: isDevelop ? 'true' : 'false',
       },
@@ -168,7 +235,8 @@ export default $config({
         args: {
           DOCKER_BUILDKIT: '1',
           CACHEBUST: '1',
-          DATABASE_URL: dbUrl ?? '',
+          // Use the secret's DATABASE_URL directly (align with election-api)
+          DATABASE_URL: dbUrl,
           STAGE: $app.stage,
         },
       },
@@ -178,10 +246,6 @@ export default $config({
         },
       },
     })
-
-    // Reference the existing swap voter DB cluster only (no creation here)
-    const swapClusterIdentifier = 'gp-voter-db-20250728'
-    aws.rds.Cluster.get('swapVoterCluster', swapClusterIdentifier)
 
     const codeBuildRole = new aws.iam.Role('codebuild-service-role', {
       assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({
