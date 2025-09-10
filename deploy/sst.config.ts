@@ -113,19 +113,29 @@ export default $config({
 
     const clusterIdentifier = isProd ? 'gp-people-db-prod' : 'gp-people-db-dev'
 
-    // Always declare subnet group so Pulumi does not delete it between runs
-    const dbSubnetGroup = new aws.rds.SubnetGroup(
-      `people-db-subnets-${$app.stage}`,
-      {
-        subnetIds: ['subnet-053357b931f0524d4', 'subnet-0bb591861f72dcb7f'],
-        tags: { Name: `gp-people-db-${$app.stage}` },
-      },
-    )
+    // Align with election-api: use existing subnet group by name
+    const subnetGroupName = isDevelop
+      ? 'api-rds-subnet-group'
+      : `api-${$app.stage}-rds-subnet-group`
+    const subnetGroup = await aws.rds.getSubnetGroup({ name: subnetGroupName })
 
-    // Use existing SGs like election-api for DB access
-    const existingDbSgId = isProd
-      ? 'sg-03783e4adbbee87dc'
-      : 'sg-0b834a3f7b64950d0'
+    // Use election-api style RDS Security Group resolution
+    let rdsSecurityGroupName: string
+    let rdsSecurityGroupId: string
+    if (isDevelop) {
+      rdsSecurityGroupName = 'api-rds-security-group'
+      rdsSecurityGroupId = 'sg-0b834a3f7b64950d0'
+    } else if (isProd) {
+      rdsSecurityGroupName = 'api-master-rds-security-group'
+      rdsSecurityGroupId = 'sg-03783e4adbbee87dc'
+    } else {
+      throw new Error('Unrecognized app stage')
+    }
+
+    const rdsSecurityGroup = aws.ec2.SecurityGroup.get(
+      rdsSecurityGroupName,
+      rdsSecurityGroupId,
+    )
 
     // Try adopt existing cluster into state; otherwise create
     let peopleDbCluster: aws.rds.Cluster
@@ -148,8 +158,8 @@ export default $config({
         masterUsername: dbUser!,
         masterPassword: dbPassword!,
         databaseName: dbName!,
-        dbSubnetGroupName: dbSubnetGroup.name,
-        vpcSecurityGroupIds: [existingDbSgId],
+        dbSubnetGroupName: subnetGroup.name,
+        vpcSecurityGroupIds: [rdsSecurityGroup.id],
         backupRetentionPeriod: isProd ? 7 : 1,
         preferredBackupWindow: '07:00-09:00',
         storageEncrypted: true,
@@ -164,13 +174,11 @@ export default $config({
             engine: 'aurora-postgresql',
             instanceClass: isProd ? 'db.r6g.large' : 'db.t4g.medium',
             publiclyAccessible: false,
-            dbSubnetGroupName: dbSubnetGroup.name,
+            dbSubnetGroupName: subnetGroup.name,
           },
         )
       }
     }
-
-    const peopleDbUrl = pulumi.interpolate`postgresql://${dbUser}:${dbPassword}@${peopleDbCluster.endpoint}:5432/${dbName}`
 
     new sst.aws.Service(`people-api-${$app.stage}`, {
       cluster,
@@ -215,8 +223,6 @@ export default $config({
         AWS_REGION: 'us-west-2',
         WEBAPP_ROOT_URL: webAppRootUrl,
         ...secretsJson,
-        // Ensure the application uses the new people database URL
-        DATABASE_URL: peopleDbUrl,
         // Allow localhost during development for manual testing only
         S2S_ALLOW_LOCALHOST: isDevelop ? 'true' : 'false',
       },
@@ -226,7 +232,8 @@ export default $config({
         args: {
           DOCKER_BUILDKIT: '1',
           CACHEBUST: '1',
-          DATABASE_URL: peopleDbUrl,
+          // Use the secret's DATABASE_URL directly (align with election-api)
+          DATABASE_URL: dbUrl,
           STAGE: $app.stage,
         },
       },
