@@ -44,8 +44,8 @@ export class PeopleService {
 
     const isEvenYear = electionYear % 2 === 0
     const performanceField: PerformanceFieldKey = isEvenYear
-      ? 'Voters_VotingPerformanceEvenYearGeneral'
-      : 'Voters_VotingPerformanceMinorElection'
+      ? 'VotingPerformanceEvenYearGeneral'
+      : 'VotingPerformanceMinorElection'
 
     const where = this.buildWhere({
       state,
@@ -90,10 +90,10 @@ export class PeopleService {
       const select: Prisma.VoterSelect = {
         LALVOTERID: true,
         State: true,
-        Voters_FirstName: true,
-        Voters_MiddleName: true,
-        Voters_LastName: true,
-        Voters_NameSuffix: true,
+        FirstName: true,
+        MiddleName: true,
+        LastName: true,
+        NameSuffix: true,
         Residence_Addresses_AddressLine: true,
         Residence_Addresses_ExtraAddressLine: true,
         Residence_Addresses_City: true,
@@ -108,8 +108,8 @@ export class PeopleService {
         Mailing_Addresses_ZipPlus4: true,
         VoterTelephones_LandlineFormatted: true,
         VoterTelephones_CellPhoneFormatted: true,
-        Voters_Age: true,
-        Voters_Gender: true,
+        Age: true,
+        Gender: true,
         Parties_Description: true,
         US_Congressional_District: true,
         State_Senate_District: true,
@@ -145,8 +145,8 @@ export class PeopleService {
     const minimal: Prisma.VoterSelect = {
       LALVOTERID: true,
       State: true,
-      Voters_FirstName: true,
-      Voters_LastName: true,
+      FirstName: true,
+      LastName: true,
       Residence_Addresses_City: true,
       Residence_Addresses_State: true,
       Residence_Addresses_Zip: true,
@@ -177,7 +177,7 @@ export class PeopleService {
     if (filters.includes('gender_male')) genderValues.push('M')
     if (filters.includes('gender_female')) genderValues.push('F')
     if (filters.includes('gender_unknown')) genderValues.push('')
-    if (genderValues.length) where.Voters_Gender = { in: genderValues }
+    if (genderValues.length) where.Gender = { in: genderValues }
 
     // parties (TODO verify exact strings)
     const partyValues: string[] = []
@@ -193,17 +193,16 @@ export class PeopleService {
     )
     if (usesAge) {
       type AgeClause = Prisma.VoterWhereInput & {
-        Voters_Age_Int?: Prisma.IntNullableFilter
+        Age_Int?: Prisma.IntNullableFilter
       }
       const ageOr: AgeClause[] = []
       if (filters.includes('age_18_25'))
-        ageOr.push({ Voters_Age_Int: { gte: 18, lte: 25 } })
+        ageOr.push({ Age_Int: { gte: 18, lte: 25 } })
       if (filters.includes('age_25_35'))
-        ageOr.push({ Voters_Age_Int: { gt: 25, lte: 35 } })
+        ageOr.push({ Age_Int: { gt: 25, lte: 35 } })
       if (filters.includes('age_35_50'))
-        ageOr.push({ Voters_Age_Int: { gt: 35, lte: 50 } })
-      if (filters.includes('age_50_plus'))
-        ageOr.push({ Voters_Age_Int: { gt: 50 } })
+        ageOr.push({ Age_Int: { gt: 35, lte: 50 } })
+      if (filters.includes('age_50_plus')) ageOr.push({ Age_Int: { gt: 50 } })
       if (ageOr.length) {
         const andClauses: Prisma.VoterWhereInput[] = []
         if (where.AND) {
