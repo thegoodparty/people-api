@@ -4,6 +4,34 @@ import { ListPeopleDTO } from './people.schema'
 import { BadRequestException, Injectable } from '@nestjs/common'
 import { AllowedFilter } from './people.types'
 
+// Narrowly typed helpers for dynamic year-based select keys
+type GeneralYearKey = Extract<keyof Prisma.VoterSelect, `General_${number}`>
+type PrimaryYearKey = Extract<keyof Prisma.VoterSelect, `Primary_${number}`>
+type OtherElectionYearKey = Extract<
+  keyof Prisma.VoterSelect,
+  `OtherElection_${number}`
+>
+type PresidentialPrimaryYearKey = Extract<
+  keyof Prisma.VoterSelect,
+  `PresidentialPrimary_${number}`
+>
+type AnyElectionYearKey = Extract<
+  keyof Prisma.VoterSelect,
+  `AnyElection_${number}`
+>
+type YearSelectKey =
+  | GeneralYearKey
+  | PrimaryYearKey
+  | OtherElectionYearKey
+  | PresidentialPrimaryYearKey
+  | AnyElectionYearKey
+
+type PerformanceFieldKey = Extract<
+  keyof Prisma.VoterWhereInput,
+  | 'Voters_VotingPerformanceEvenYearGeneral'
+  | 'Voters_VotingPerformanceMinorElection'
+>
+
 @Injectable()
 export class PeopleService {
   constructor(private readonly prisma: PrismaService) {}
@@ -13,6 +41,7 @@ export class PeopleService {
       state,
       districtType,
       districtName,
+      electionYear,
       resultsPerPage,
       page,
       filters = [],
@@ -32,17 +61,23 @@ export class PeopleService {
       }
     }
 
+    const isEvenYear = electionYear % 2 === 0
+    const performanceField: PerformanceFieldKey = isEvenYear
+      ? 'Voters_VotingPerformanceEvenYearGeneral'
+      : 'Voters_VotingPerformanceMinorElection'
+
     const where = this.buildWhere({
       state,
       districtType: districtType as keyof Prisma.VoterWhereInput | undefined,
       districtName,
       filters,
+      performanceField,
     })
 
     const take = resultsPerPage
     const skip = (page - 1) * resultsPerPage
 
-    const select = this.buildVoterSelect(full)
+    const select = this.buildVoterSelect(full, electionYear)
 
     const [totalResults, people] = await Promise.all([
       model.count({ where }),
@@ -65,9 +100,13 @@ export class PeopleService {
     }
   }
 
-  private buildVoterSelect(full: boolean): Prisma.VoterSelect {
+  private buildVoterSelect(
+    full: boolean,
+    electionYear: number,
+  ): Prisma.VoterSelect {
+    const isEvenYear = electionYear % 2 === 0
     if (full) {
-      return {
+      const select: Prisma.VoterSelect = {
         LALVOTERID: true,
         State: true,
         Voters_FirstName: true,
@@ -98,8 +137,31 @@ export class PeopleService {
         City: true,
         Precinct: true,
       }
+
+      if (isEvenYear) {
+        ;(select as Record<YearSelectKey, boolean>)[
+          `General_${electionYear}` as GeneralYearKey
+        ] = true
+        ;(select as Record<YearSelectKey, boolean>)[
+          `Primary_${electionYear}` as PrimaryYearKey
+        ] = true
+        ;(select as Record<YearSelectKey, boolean>)[
+          `OtherElection_${electionYear}` as OtherElectionYearKey
+        ] = true
+        if (electionYear % 4 === 0) {
+          ;(select as Record<YearSelectKey, boolean>)[
+            `PresidentialPrimary_${electionYear}` as PresidentialPrimaryYearKey
+          ] = true
+        }
+      } else {
+        ;(select as Record<YearSelectKey, boolean>)[
+          `AnyElection_${electionYear}` as AnyElectionYearKey
+        ] = true
+      }
+
+      return select
     }
-    return {
+    const minimal: Prisma.VoterSelect = {
       LALVOTERID: true,
       State: true,
       Voters_FirstName: true,
@@ -108,6 +170,7 @@ export class PeopleService {
       Residence_Addresses_State: true,
       Residence_Addresses_Zip: true,
     }
+    return minimal
   }
 
   private buildWhere(options: {
@@ -115,8 +178,10 @@ export class PeopleService {
     districtType?: keyof Prisma.VoterWhereInput | undefined
     districtName?: string | undefined
     filters: AllowedFilter[]
+    performanceField: PerformanceFieldKey
   }): Prisma.VoterWhereInput {
-    const { state, districtType, districtName, filters } = options
+    const { state, districtType, districtName, filters, performanceField } =
+      options
     const where: Prisma.VoterWhereInput = { State: state }
 
     if (districtType && districtName) {
@@ -174,36 +239,32 @@ export class PeopleService {
     const turnoutOr: Prisma.VoterWhereInput[] = []
     if (filters.includes('audience_superVoters')) {
       turnoutOr.push({
-        Voters_VotingPerformanceEvenYearGeneral: { in: ['High'] },
-      })
+        [performanceField]: { in: ['High'] },
+      } as unknown as Prisma.VoterWhereInput)
     }
     if (filters.includes('audience_likelyVoters')) {
       turnoutOr.push({
-        Voters_VotingPerformanceEvenYearGeneral: {
-          in: ['Above Average', 'Average'],
-        },
-      })
+        [performanceField]: { in: ['Above Average', 'Average'] },
+      } as unknown as Prisma.VoterWhereInput)
     }
     if (filters.includes('audience_unreliableVoters')) {
       turnoutOr.push({
-        Voters_VotingPerformanceEvenYearGeneral: { in: ['Below Average'] },
-      })
+        [performanceField]: { in: ['Below Average'] },
+      } as unknown as Prisma.VoterWhereInput)
     }
     if (filters.includes('audience_unlikelyVoters')) {
       turnoutOr.push({
-        Voters_VotingPerformanceEvenYearGeneral: { in: ['Low'] },
-      })
+        [performanceField]: { in: ['Low'] },
+      } as unknown as Prisma.VoterWhereInput)
     }
     if (filters.includes('audience_firstTimeVoters')) {
       // Match gp-api: treat no voting performance as first-time
       turnoutOr.push({
         OR: [
           {
-            Voters_VotingPerformanceEvenYearGeneral: {
-              in: ['0%', 'Not Eligible', ''],
-            },
-          },
-          { Voters_VotingPerformanceEvenYearGeneral: null },
+            [performanceField]: { in: ['0%', 'Not Eligible', ''] },
+          } as unknown as Prisma.VoterWhereInput,
+          { [performanceField]: null } as unknown as Prisma.VoterWhereInput,
         ],
       })
     }

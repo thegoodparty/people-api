@@ -28,6 +28,13 @@ export const listPeopleSchema = z.object({
     .refine((v) => STATE_CODES.includes(v), 'Invalid state code'),
   districtType: z.string(),
   districtName: z.string(),
+  electionYear: z
+    .preprocess(
+      (v) => (v === undefined ? new Date().getFullYear() : v),
+      z.coerce.number().int(),
+    )
+    .optional()
+    .default(new Date().getFullYear()),
   filters: z
     .preprocess(
       (v) => (Array.isArray(v) ? v : v ? [v] : []),
