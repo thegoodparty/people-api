@@ -25,3 +25,36 @@ export interface BuildWhereOptions {
   filters: AllowedFilter[]
   ageIds?: string[]
 }
+
+export type GeneralYearKey = Extract<
+  keyof Prisma.VoterSelect,
+  `General_${number}`
+>
+export type PrimaryYearKey = Extract<
+  keyof Prisma.VoterSelect,
+  `Primary_${number}`
+>
+export type OtherElectionYearKey = Extract<
+  keyof Prisma.VoterSelect,
+  `OtherElection_${number}`
+>
+export type PresidentialPrimaryYearKey = Extract<
+  keyof Prisma.VoterSelect,
+  `PresidentialPrimary_${number}`
+>
+export type AnyElectionYearKey = Extract<
+  keyof Prisma.VoterSelect,
+  `AnyElection_${number}`
+>
+export type YearSelectKey =
+  | GeneralYearKey
+  | PrimaryYearKey
+  | OtherElectionYearKey
+  | PresidentialPrimaryYearKey
+  | AnyElectionYearKey
+
+export type PerformanceFieldKey = Extract<
+  keyof Prisma.VoterWhereInput,
+  | 'Voters_VotingPerformanceEvenYearGeneral'
+  | 'Voters_VotingPerformanceMinorElection'
+>

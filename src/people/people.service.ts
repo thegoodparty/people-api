@@ -2,35 +2,16 @@ import { PrismaService } from 'src/prisma/prisma.service'
 import { Prisma } from '@prisma/client'
 import { ListPeopleDTO } from './people.schema'
 import { BadRequestException, Injectable } from '@nestjs/common'
-import { AllowedFilter } from './people.types'
-
-// Narrowly typed helpers for dynamic year-based select keys
-type GeneralYearKey = Extract<keyof Prisma.VoterSelect, `General_${number}`>
-type PrimaryYearKey = Extract<keyof Prisma.VoterSelect, `Primary_${number}`>
-type OtherElectionYearKey = Extract<
-  keyof Prisma.VoterSelect,
-  `OtherElection_${number}`
->
-type PresidentialPrimaryYearKey = Extract<
-  keyof Prisma.VoterSelect,
-  `PresidentialPrimary_${number}`
->
-type AnyElectionYearKey = Extract<
-  keyof Prisma.VoterSelect,
-  `AnyElection_${number}`
->
-type YearSelectKey =
-  | GeneralYearKey
-  | PrimaryYearKey
-  | OtherElectionYearKey
-  | PresidentialPrimaryYearKey
-  | AnyElectionYearKey
-
-type PerformanceFieldKey = Extract<
-  keyof Prisma.VoterWhereInput,
-  | 'Voters_VotingPerformanceEvenYearGeneral'
-  | 'Voters_VotingPerformanceMinorElection'
->
+import {
+  AllowedFilter,
+  AnyElectionYearKey,
+  GeneralYearKey,
+  OtherElectionYearKey,
+  PerformanceFieldKey,
+  PresidentialPrimaryYearKey,
+  PrimaryYearKey,
+  YearSelectKey,
+} from './people.types'
 
 @Injectable()
 export class PeopleService {
