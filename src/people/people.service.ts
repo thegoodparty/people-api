@@ -2,7 +2,6 @@ import { PrismaService } from 'src/prisma/prisma.service'
 import { Prisma } from '@prisma/client'
 import { ListPeopleDTO } from './people.schema'
 import { BadRequestException, Injectable } from '@nestjs/common'
-//
 import { AllowedFilter } from './people.types'
 
 @Injectable()
