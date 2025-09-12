@@ -1,6 +1,6 @@
 import { PrismaService } from 'src/prisma/prisma.service'
 import { Prisma } from '@prisma/client'
-import { ListPeopleDTO } from './people.schema'
+import { DownloadPeopleDTO, ListPeopleDTO } from './people.schema'
 import { BadRequestException, Injectable } from '@nestjs/common'
 import {
   AllowedFilter,
@@ -12,6 +12,9 @@ import {
   PrimaryYearKey,
   YearSelectKey,
 } from './people.types'
+import { FastifyReply } from 'fastify'
+import { format } from '@fast-csv/format'
+import type { RowMap } from '@fast-csv/format'
 
 @Injectable()
 export class PeopleService {
@@ -78,6 +81,108 @@ export class PeopleService {
         hasPreviousPage: currentPage > 1,
       },
       people,
+    }
+  }
+
+  async streamPeopleCsv(dto: DownloadPeopleDTO, res: FastifyReply) {
+    const {
+      state,
+      electionYear = new Date().getFullYear(),
+      full = true,
+      filters = [],
+    } = dto
+
+    const districtType = (dto.districtType ?? dto.electionLocation) as
+      | keyof Prisma.VoterWhereInput
+      | undefined
+    const districtName = dto.districtName ?? dto.electionType
+
+    // Validate districtType against Prisma enum if provided
+    if (districtType) {
+      const isValidField = Object.values(Prisma.VoterScalarFieldEnum).includes(
+        districtType as Prisma.VoterScalarFieldEnum,
+      )
+      if (!isValidField) {
+        throw new BadRequestException(
+          `Unsupported districtType: ${districtType as string}`,
+        )
+      }
+    }
+
+    const isEvenYear = electionYear % 2 === 0
+    const performanceField: PerformanceFieldKey = isEvenYear
+      ? 'VotingPerformanceEvenYearGeneral'
+      : 'VotingPerformanceMinorElection'
+
+    const where = this.buildWhere({
+      state,
+      districtType,
+      districtName,
+      filters,
+      performanceField,
+    })
+
+    const select = this.buildVoterSelect(full, electionYear)
+    const selectedColumns = Object.keys(select)
+    const headers = [...selectedColumns, 'electionLocation', 'electionType']
+
+    type ExportRow = RowMap<string | number | null | undefined>
+    const csvStream = format<ExportRow, ExportRow>({ headers })
+    csvStream.pipe(res.raw)
+
+    const model = this.prisma.voter
+    const pageSize = 5000
+    let cursor: string | undefined
+    let aborted = false
+
+    const onClose = () => {
+      aborted = true
+    }
+    res.raw.on('close', onClose)
+
+    try {
+      // pagination loop
+      for (;;) {
+        if (aborted) break
+
+        const page = await model.findMany({
+          where,
+          select,
+          orderBy: { LALVOTERID: 'asc' },
+          take: pageSize,
+          ...(cursor
+            ? { skip: 1, cursor: { LALVOTERID: cursor as string } }
+            : {}),
+        })
+
+        if (!page.length) break
+
+        type PrismaRow = Record<string, string | number | null | undefined>
+        for (const person of page as unknown as PrismaRow[]) {
+          if (aborted) break
+          const row: ExportRow = {}
+          for (const key of selectedColumns) {
+            row[key] = person[key]
+          }
+          row.electionLocation = districtType ?? ''
+          row.electionType = districtName ?? ''
+
+          const canContinue = csvStream.write(row)
+          if (!canContinue) {
+            await new Promise<void>((resolve) =>
+              csvStream.once('drain', resolve),
+            )
+          }
+        }
+
+        cursor = (page[page.length - 1] as unknown as { LALVOTERID: string })
+          .LALVOTERID
+
+        if (page.length < pageSize) break
+      }
+    } finally {
+      res.raw.off('close', onClose)
+      csvStream.end()
     }
   }
 
