@@ -158,7 +158,7 @@ export class PeopleService {
         if (!page.length) break
 
         type PrismaRow = Record<string, string | number | null | undefined>
-        for (const person of page as PrismaRow[]) {
+        for (const person of page as unknown as PrismaRow[]) {
           if (aborted) break
           const row: ExportRow = {}
           for (const key of selectedColumns) {
