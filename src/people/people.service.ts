@@ -174,35 +174,35 @@ export class PeopleService {
 
     // genders
     const genderValues: string[] = []
-    if (filters.includes('gender_male')) genderValues.push('M')
-    if (filters.includes('gender_female')) genderValues.push('F')
-    if (filters.includes('gender_unknown')) genderValues.push('')
+    if (filters.includes('genderMale')) genderValues.push('M')
+    if (filters.includes('genderFemale')) genderValues.push('F')
+    if (filters.includes('genderUnknown')) genderValues.push('')
     if (genderValues.length) where.Gender = { in: genderValues }
 
     // parties (TODO verify exact strings)
     const partyValues: string[] = []
-    if (filters.includes('party_democrat')) partyValues.push('Democratic')
-    if (filters.includes('party_republican')) partyValues.push('Republican')
-    if (filters.includes('party_independent'))
+    if (filters.includes('partyDemocrat')) partyValues.push('Democratic')
+    if (filters.includes('partyRepublican')) partyValues.push('Republican')
+    if (filters.includes('partyIndependent'))
       partyValues.push('Non-Partisan', 'Other')
     if (partyValues.length) where.Parties_Description = { in: partyValues }
 
     // age buckets on indexed integer column
     const usesAge = filters.some((f) =>
-      ['age_18_25', 'age_25_35', 'age_35_50', 'age_50_plus'].includes(f),
+      ['age18_25', 'age25_35', 'age35_50', 'age50Plus'].includes(f),
     )
     if (usesAge) {
       type AgeClause = Prisma.VoterWhereInput & {
         Age_Int?: Prisma.IntNullableFilter
       }
       const ageOr: AgeClause[] = []
-      if (filters.includes('age_18_25'))
+      if (filters.includes('age18_25'))
         ageOr.push({ Age_Int: { gte: 18, lte: 25 } })
-      if (filters.includes('age_25_35'))
+      if (filters.includes('age25_35'))
         ageOr.push({ Age_Int: { gt: 25, lte: 35 } })
-      if (filters.includes('age_35_50'))
+      if (filters.includes('age35_50'))
         ageOr.push({ Age_Int: { gt: 35, lte: 50 } })
-      if (filters.includes('age_50_plus')) ageOr.push({ Age_Int: { gt: 50 } })
+      if (filters.includes('age50Plus')) ageOr.push({ Age_Int: { gt: 50 } })
       if (ageOr.length) {
         const andClauses: Prisma.VoterWhereInput[] = []
         if (where.AND) {
@@ -217,27 +217,27 @@ export class PeopleService {
 
     // audience filters
     const turnoutOr: Prisma.VoterWhereInput[] = []
-    if (filters.includes('audience_superVoters')) {
+    if (filters.includes('audienceSuperVoters')) {
       turnoutOr.push({
         [performanceField]: { in: ['High'] },
       } as unknown as Prisma.VoterWhereInput)
     }
-    if (filters.includes('audience_likelyVoters')) {
+    if (filters.includes('audienceLikelyVoters')) {
       turnoutOr.push({
         [performanceField]: { in: ['Above Average', 'Average'] },
       } as unknown as Prisma.VoterWhereInput)
     }
-    if (filters.includes('audience_unreliableVoters')) {
+    if (filters.includes('audienceUnreliableVoters')) {
       turnoutOr.push({
         [performanceField]: { in: ['Below Average'] },
       } as unknown as Prisma.VoterWhereInput)
     }
-    if (filters.includes('audience_unlikelyVoters')) {
+    if (filters.includes('audienceUnlikelyVoters')) {
       turnoutOr.push({
         [performanceField]: { in: ['Low'] },
       } as unknown as Prisma.VoterWhereInput)
     }
-    if (filters.includes('audience_firstTimeVoters')) {
+    if (filters.includes('audienceFirstTimeVoters')) {
       // Match gp-api: treat no voting performance as first-time
       turnoutOr.push({
         OR: [
@@ -248,7 +248,7 @@ export class PeopleService {
         ],
       })
     }
-    if (filters.includes('audience_request')) {
+    if (filters.includes('audienceRequest')) {
       // no-op by design
     }
     if (turnoutOr.length) {
