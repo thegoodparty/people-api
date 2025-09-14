@@ -19,6 +19,8 @@ const allowedFilters = [
   'genderFemale',
   'genderUnknown',
   'audienceRequest',
+  'cellPhoneFormatted',
+  'landlineFormatted',
 ] as const
 
 export const listPeopleSchema = z.object({
@@ -56,6 +58,8 @@ export const listPeopleSchema = z.object({
           gender_female: 'genderFemale',
           gender_unknown: 'genderUnknown',
           audience_request: 'audienceRequest',
+          voterTelephones_CellPhoneFormatted: 'cellPhoneFormatted',
+          voterTelephones_LandlineFormatted: 'landlineFormatted',
         }
         return values.map((raw) => {
           const s = String(raw)
@@ -117,6 +121,8 @@ export const downloadPeopleSchema = z.object({
           gender_female: 'genderFemale',
           gender_unknown: 'genderUnknown',
           audience_request: 'audienceRequest',
+          voterTelephones_CellPhoneFormatted: 'cellPhoneFormatted',
+          voterTelephones_LandlineFormatted: 'landlineFormatted',
         }
         return values.map((raw) => {
           const s = String(raw)

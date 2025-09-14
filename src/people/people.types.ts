@@ -17,6 +17,8 @@ export type AllowedFilter =
   | 'genderFemale'
   | 'genderUnknown'
   | 'audienceRequest'
+  | 'cellPhoneFormatted'
+  | 'landlineFormatted'
 
 export interface BuildWhereOptions {
   state: string
