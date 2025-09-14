@@ -15,10 +15,10 @@ export class PeopleController {
   @Get('download')
   async downloadPeople(
     @Query() dto: DownloadPeopleDTO,
-    @Res({ passthrough: true }) res: FastifyReply,
+    @Res() res: FastifyReply,
   ) {
     res.header('Content-Type', 'text/csv')
     res.header('Content-Disposition', 'attachment; filename="people.csv"')
-    return this.peopleService.streamPeopleCsv(dto, res)
+    await this.peopleService.streamPeopleCsv(dto, res)
   }
 }
