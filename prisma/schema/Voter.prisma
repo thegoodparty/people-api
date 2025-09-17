@@ -15,14 +15,17 @@ model Voter {
     Gender                    String?  @db.Text() //"M", "F" or blank.
 
     // Demographics
+    Business_Owner                         String?   @db.Text() // ConsumerData_Business_Owner
     CalculatedRegDate                      DateTime? @db.Date() // format 99/99/9999'; calculated reg date will be the same as official reg date except in those cases where the county has used it as a record update field in which case the calculated registration date will be set to 30 days prior to the oldest recorded vote date as a better indicator of the true registration date of the voter'
     CountyEthnic_Description               String?   @db.Text() // CountyEthnic_Description
     CountyEthnic_LALEthnicCode             String?   @db.Text() // CountyEthnic_LALEthnicCode
     CountyVoterID                          String?   @db.Text() // If available
-    DateConfidence_Description             String?   @db.Text() // Identifies whether date is complete or is partial and if the latter, which elements are correct.
+    Education_Of_Person                    String?   @db.Text() // ConsumerData_Education_Of_Person
+    Estimated_Income_Amount                String?   @db.Text() // ConsumerData_Estimated_Income_Amount
     EthnicGroups_EthnicGroup1Desc          String?   @db.Text() // 
     Ethnic_Description                     String?   @db.Text() // one of approximately 100 ethnic categories covering about 90% of voters with the remaining voters classifed as unknown'.  See Ethnic tab.'
-    Languages_Description                  String?   @db.Text() // Based on first and last name analysis and self-reported data; See Languages tab
+    Homeowner_Probability_Model            String?   @db.Text() // ConsumerData_Homeowner_Probability_Model: Home Owner, Probable Home Owner, Renter
+    Language_Code                          String?   @db.Text() // ConsumerData_Language_Code
     Mailing_Addresses_AddressLine          String?   @db.Text() // 
     Mailing_Addresses_ApartmentNum         String?   @db.Text() // 
     Mailing_Addresses_ApartmentType        String?   @db.Text() // 
@@ -40,11 +43,8 @@ model Voter {
     Mailing_Addresses_Zip                  String?   @db.Text() // 
     Mailing_Addresses_ZipPlus4             String?   @db.Text() // 
     Mailing_Families_FamilyID              String?   @db.Text() // Unique alpha-numeric ID starting with an M' for 'Mailing' that is common to all members of a mailing household address but different from all other mailing households.'
-    Mailing_Families_HHCount               Int?      @db.Integer // Total number of voters residing at the given mailing address, 1 thru 10
     Mailing_HHGender_Description           String?   @db.Text() // Cannot Determine,Female Only Household,Male Only Household,Mixed Gender Household
-    Mailing_HHParties_Description          String?   @db.Text() // Same as Residence HH Parties calculation but based on those sharing the same mailing address rather than those sharing the same residence address
-    MaritalStatus_Description              String?   @db.Text() // Married,Non-Traditional
-    MilitaryStatus_Description             String?   @db.Text() // Military,Veteran
+    Marital_Status                         String?   @db.Text() // ConsumerData_Marital_Status: Inferred Married, Inferred Single, Married, Single, Unknown
     MovedFrom_Date                         DateTime? @db.Date() // Voters_MovedFrom_Date
     MovedFrom_Party_Description            String?   @db.Text() // Voters_MovedFrom_Party
     MovedFrom_State                        String?   @db.Text() // Voters_MovedFrom_State
@@ -52,7 +52,7 @@ model Voter {
     OfficialRegDate                        String?   @db.Text() // As reported by election authority.
     Parties_Description                    String?   @db.Text() // Full name of official party. See Parties tab.
     PlaceOfBirth                           String?   @db.Text() // Unformatted and non-standardized text field available only in some states.
-    Religions_Description                  String?   @db.Text() // Modeled data based on first name, last name and census data.  Possible values: Jewish, Catholic, Protestant, Mormon, Islamic, Buddhist, Hindu, Shinto, Sikh, Lutheran, Eastern Orthodox, Greek Orthodox, Christian
+    Presence_Of_Children                   String?   @db.Text() // ConsumerData_Presence_Of_Children_in_HH
     Residence_Addresses_AddressLine        String?   @db.Text() // 
     Residence_Addresses_ApartmentNum       String?   @db.Text() // 
     Residence_Addresses_ApartmentType      String?   @db.Text() // 
@@ -62,7 +62,6 @@ model Voter {
     Residence_Addresses_Designator         String?   @db.Text() // 
     Residence_Addresses_DPBC               String?   @db.Text() // Residence_Addresses_DPBC
     Residence_Addresses_ExtraAddressLine   String?   @db.Text() // 
-    Residence_Addresses_GeoHash            String?   @db.Text() //  
     Residence_Addresses_HouseNumber        String?   @db.Text() // 
     Residence_Addresses_LatLongAccuracy    String?   @db.Text() // Residence_Addresses_LatLongAccuracy
     Residence_Addresses_Latitude           String?   @db.Text() // 
@@ -74,10 +73,14 @@ model Voter {
     Residence_Addresses_Zip                String?   @db.Text() // 
     Residence_Addresses_ZipPlus4           String?   @db.Text() // 
     Residence_HHParties_Description        String?   @db.Text() // Same as Mailing HH Parties calculation but based on those sharing the same residence address rather than those sharing the same mailing address
+    Registered_Voter                       Boolean?  @db.Boolean() // anyone from L2 should be set to true, per Kaylee
     SequenceOddEven                        String?   @db.Text() // Voters_SequenceOddEven
     SequenceZigZag                         String?   @db.Text() // Voters_SequenceZigZag
     StateVoterID                           String?   @db.Text() // State-supplied voter ID
+    Veteran_Status                         String?   @db.Text() // ConsumerDataLL_Veteran
     VoterParties_Change_Changed_Party      String?   @db.Text() // Voter changed party affiliation between Dem and Rep
+    Voter_Status                           String?   @db.Text() // In-house computed classification. One of: Unlikely, First Time, Likely, Super, Unknown
+    Voter_Status_UpdatedAt                 DateTime?
     VoterTelephones_CellConfidenceCode     Int?      @db.Integer // 
     VoterTelephones_CellPhoneFormatted     String?   @db.Text() // 
     VoterTelephones_LandlineConfidenceCode Int?      @db.Integer // 
@@ -231,11 +234,12 @@ model Voter {
     Judicial_Jury_District                           String? @db.Text() // District
     Judicial_Juvenile_Court_District                 String? @db.Text() // District
     Judicial_Magistrate_Division                     String? @db.Text() // District
+    Judicial_Municipal_Court_District                String? @db.Text() // District
     Judicial_Sub_Circuit_District                    String? @db.Text()
     Judicial_Superior_Court_District                 String? @db.Text() // District
     Judicial_Supreme_Court_District                  String? @db.Text() // District
+    Landscaping_and_Lighting_Assessment_District     String? @db.Text()
     Land_Commission                                  String? @db.Text() // District
-    Landscaping_And_Lighting_Assessment_Distric      String? @db.Text() // District
     Law_Enforcement_District                         String? @db.Text() // District
     Learning_Community_Coordinating_Council_District String? @db.Text() // District
     Levee_District                                   String? @db.Text() // District
@@ -258,7 +262,6 @@ model Voter {
     Mountain_Water_District                          String? @db.Text() // District
     Multi_township_Assessor                          String? @db.Text() // District
     Municipal_Advisory_Council_District              String? @db.Text() // District
-    Municipal_Court_District                         String? @db.Text() // District
     Municipal_Utility_District                       String? @db.Text() // District
     Municipal_Utility_SubDistrict                    String? @db.Text() // District
     Municipal_Water_District                         String? @db.Text() // District
@@ -315,8 +318,6 @@ model Voter {
     Sewer_Maintenance_District                       String? @db.Text() // District
     Sewer_SubDistrict                                String? @db.Text() // District
     Snow_Removal_District                            String? @db.Text() // District
-    Soil_And_Water_District                          String? @db.Text() // District
-    Soil_And_Water_District_At_Large                 String? @db.Text() // District
     Special_Reporting_District                       String? @db.Text() // District
     Special_Tax_District                             String? @db.Text() // District
     State_House_District                             String? @db.Text() // District
@@ -350,8 +351,8 @@ model Voter {
     Water_Agency_SubDistrict                         String? @db.Text() // District
     Water_Conservation_District                      String? @db.Text() // District
     Water_Conservation_SubDistrict                   String? @db.Text() // District
-    Water_Control__Water_Conservation                String? @db.Text() // District
-    Water_Control__Water_Conservation_SubDistrict    String? @db.Text() // District
+    Water_Control_Water_Conservation                 String? @db.Text() // District
+    Water_Control_Water_Conservation_SubDistrict     String? @db.Text() // District
     Water_District                                   String? @db.Text() // District
     Water_Public_Utility_District                    String? @db.Text() // District
     Water_Public_Utility_Subdistrict                 String? @db.Text() // District
@@ -416,7 +417,7 @@ model Voter {
     @@index([Judicial_Superior_Court_District])
     @@index([Judicial_Supreme_Court_District])
     @@index([Middle_School_District])
-    @@index([Municipal_Court_District])
+    @@index([Judicial_Municipal_Court_District])
     @@index([Proposed_City_Commissioner_District])
     @@index([Proposed_Elementary_School_District])
     @@index([Proposed_Unified_School_District])
@@ -444,8 +445,8 @@ model Voter {
     @@index([Water_Agency_SubDistrict])
     @@index([Water_Conservation_District])
     @@index([Water_Conservation_SubDistrict])
-    @@index([Water_Control__Water_Conservation])
-    @@index([Water_Control__Water_Conservation_SubDistrict])
+    @@index([Water_Control_Water_Conservation])
+    @@index([Water_Control_Water_Conservation_SubDistrict])
     @@index([Water_District])
     @@index([Water_Public_Utility_District])
     @@index([Water_Public_Utility_Subdistrict])
@@ -523,7 +524,7 @@ model Voter {
     @@index([Irrigation_SubDistrict])
     @@index([Island])
     @@index([Land_Commission])
-    @@index([Landscaping_And_Lighting_Assessment_Distric])
+    @@index([Landscaping_and_Lighting_Assessment_District])
     @@index([Law_Enforcement_District])
     @@index([Learning_Community_Coordinating_Council_District])
     @@index([Levee_District])
@@ -580,8 +581,6 @@ model Voter {
     @@index([Sewer_Maintenance_District])
     @@index([Sewer_SubDistrict])
     @@index([Snow_Removal_District])
-    @@index([Soil_And_Water_District])
-    @@index([Soil_And_Water_District_At_Large])
     @@index([Special_Reporting_District])
     @@index([Special_Tax_District])
     @@index([Storm_Water_District])
@@ -599,7 +598,6 @@ model Voter {
     @@index([MiddleName])
     @@index([LastName])
     @@index([Active])
-    @@index([MilitaryStatus_Description])
     @@index([Age])
     @@index([Gender])
     @@index([Parties_Description])
