@@ -41,6 +41,19 @@ const coerceArray = (v: unknown): unknown[] => {
   return v != null ? [v] : []
 }
 
+const fieldOpsSchema = z.object({
+  eq: z.union([z.string(), z.boolean()]).optional(),
+  in: z
+    .preprocess(
+      (v) => coerceArray(v),
+      z.array(z.union([z.string(), z.boolean()])),
+    )
+    .optional(),
+  is: z.enum(['null', 'not_null']).optional(),
+})
+
+const demographicFilterSchema = z.record(fieldOpsSchema)
+
 export const listPeopleSchema = z.object({
   state: z
     .string()
@@ -97,6 +110,7 @@ export const listPeopleSchema = z.object({
     .default(true),
   resultsPerPage: z.coerce.number().optional().default(50),
   page: z.coerce.number().optional().default(1),
+  filter: demographicFilterSchema.optional().default({}),
 })
 
 export class ListPeopleDTO extends createZodDto(listPeopleSchema) {}
@@ -158,6 +172,7 @@ export const downloadPeopleSchema = z.object({
     .preprocess((v) => (v === undefined ? true : v), z.coerce.boolean())
     .optional()
     .default(true),
+  filter: demographicFilterSchema.optional().default({}),
 })
 
 export class DownloadPeopleDTO extends createZodDto(downloadPeopleSchema) {}

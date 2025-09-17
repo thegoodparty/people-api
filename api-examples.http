@@ -1,0 +1,12 @@
+### List people with language and voter status filters
+GET http://localhost:3002/people/list?state=WY&districtType=City&districtName=Los%20Angeles&resultsPerPage=50&page=1&filter[languageCode][in][]=EN&filter[languageCode][in][]=ES&filter[voterStatus][eq]=Active
+
+### List people where educationOfPerson is non-null
+GET http://localhost:3002/people/list?state=WY&districtType=City&districtName=Los%20Angeles&filter[educationOfPerson][is]=not_null
+
+### List people with registeredVoter true or false (boolean IN)
+GET http://localhost:3002/people/list?state=WY&districtType=City&districtName=Los%20Angeles&filter[registeredVoter][in][]=true&filter[registeredVoter][in][]=false
+
+### Download CSV with veteranStatus IN and presenceOfChildren is null
+GET http://localhost:3002/people/download?state=WY&districtType=City&districtName=Los%20Angeles&filter[veteranStatus][in][]=Yes&filter[veteranStatus][in][]=No&filter[presenceOfChildren][is]=null
+
