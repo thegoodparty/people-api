@@ -177,7 +177,7 @@ export default $config({
           {
             clusterIdentifier: peopleDbCluster.id,
             engine: 'aurora-postgresql',
-            instanceClass: isProd ? 'db.r6g.large' : 'db.t4g.medium',
+            instanceClass: isProd ? 'db.r6g.4xlarge' : 'db.t4g.medium',
             publiclyAccessible: false,
             dbSubnetGroupName: dbSubnetGroup.name,
           },
