@@ -25,6 +25,10 @@ import type { RowMap } from '@fast-csv/format'
 export class PeopleService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private static readonly MAX_FIELDS = 15
+  private static readonly API_FIELD_MAX_CHARS = 100
+  private static readonly API_FIELD_MAX_VALUES = 50
+
   async findPeople(dto: ListPeopleDTO) {
     const {
       state,
@@ -408,9 +412,9 @@ export class PeopleService {
     if (!fieldNames.length) return where
 
     // enforce max fields
-    if (fieldNames.length > 15) {
+    if (fieldNames.length > PeopleService.MAX_FIELDS) {
       throw new BadRequestException(
-        `Too many fields in filter. Max allowed is 15`,
+        `Too many fields in filter. Max allowed is ${PeopleService.MAX_FIELDS}`,
       )
     }
 
@@ -450,9 +454,9 @@ export class PeopleService {
               `Field ${apiField} expects a string for eq`,
             )
           }
-          if (ops.eq.length > 100) {
+          if (ops.eq.length > PeopleService.API_FIELD_MAX_CHARS) {
             throw new BadRequestException(
-              `Value for ${apiField} exceeds 100 characters`,
+              `Value for ${apiField} exceeds ${PeopleService.API_FIELD_MAX_CHARS} characters`,
             )
           }
           clauses.push({
@@ -464,9 +468,9 @@ export class PeopleService {
       if (ops.in !== undefined) {
         const values = Array.isArray(ops.in) ? ops.in : [ops.in]
         if (!values.length) continue
-        if (values.length > 50) {
+        if (values.length > PeopleService.API_FIELD_MAX_VALUES) {
           throw new BadRequestException(
-            `Too many values for ${apiField}. Max allowed is 50`,
+            `Too many values for ${apiField}. Max allowed is ${PeopleService.API_FIELD_MAX_VALUES}`,
           )
         }
         if (type === 'boolean') {
@@ -498,9 +502,9 @@ export class PeopleService {
                 `Field ${apiField} only accepts string values`,
               )
             }
-            if (v.length > 100) {
+            if (v.length > PeopleService.API_FIELD_MAX_CHARS) {
               throw new BadRequestException(
-                `Value for ${apiField} exceeds 100 characters`,
+                `Value for ${apiField} exceeds ${PeopleService.API_FIELD_MAX_CHARS} characters`,
               )
             }
             perValueClauses.push({
