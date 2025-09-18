@@ -5,6 +5,7 @@ import {
   DEMOGRAPHIC_FILTER_FIELDS,
   DemographicFilter,
   FieldFilterOps,
+  FilterFieldType,
 } from './people.filters'
 import { BadRequestException, Injectable } from '@nestjs/common'
 import {
@@ -402,138 +403,133 @@ export class PeopleService {
     return where
   }
 
-  private translateDemographicFilter(
-    filter: DemographicFilter,
+  private processEqualityOperation(
+    apiField: string,
+    prismaField: string,
+    type: FilterFieldType,
+    value: unknown,
   ): Prisma.VoterWhereInput {
-    const where: Prisma.VoterWhereInput = {}
-    const andClauses: Prisma.VoterWhereInput[] = []
+    if (type === 'boolean') {
+      let coercedValue = value
+      if (typeof value === 'string') {
+        const s = value.toLowerCase()
+        if (s === 'true') coercedValue = true
+        else if (s === 'false') coercedValue = false
+        else {
+          throw new BadRequestException(`Field ${apiField} expects true/false`)
+        }
+      }
+      if (typeof coercedValue !== 'boolean') {
+        throw new BadRequestException(
+          `Field ${apiField} expects a boolean for eq`,
+        )
+      }
+      return { [prismaField]: coercedValue as boolean } as never
+    } else {
+      if (typeof value !== 'string') {
+        throw new BadRequestException(
+          `Field ${apiField} expects a string for eq`,
+        )
+      }
+      if (value.length > PeopleService.API_FIELD_MAX_CHARS) {
+        throw new BadRequestException(
+          `Value for ${apiField} exceeds ${PeopleService.API_FIELD_MAX_CHARS} characters`,
+        )
+      }
+      return {
+        [prismaField]: { equals: value, mode: 'insensitive' },
+      } as never
+    }
+  }
 
-    const fieldNames = Object.keys(filter)
-    if (!fieldNames.length) return where
-
-    // enforce max fields
-    if (fieldNames.length > PeopleService.MAX_FIELDS) {
+  private processInclusionOperation(
+    apiField: string,
+    prismaField: string,
+    type: FilterFieldType,
+    inValue: unknown[] | unknown,
+  ): Prisma.VoterWhereInput | null {
+    const values = Array.isArray(inValue) ? inValue : [inValue]
+    if (!values.length) return null
+    if (values.length > PeopleService.API_FIELD_MAX_VALUES) {
       throw new BadRequestException(
-        `Too many fields in filter. Max allowed is ${PeopleService.MAX_FIELDS}`,
+        `Too many values for ${apiField}. Max allowed is ${PeopleService.API_FIELD_MAX_VALUES}`,
       )
     }
 
-    for (const apiField of fieldNames) {
-      const spec = DEMOGRAPHIC_FILTER_FIELDS[apiField]
-      if (!spec) {
-        throw new BadRequestException(`Unsupported filter field: ${apiField}`)
-      }
-
-      const ops = filter[apiField] as FieldFilterOps
-      const { prismaField, type } = spec
-
-      const clauses: Prisma.VoterWhereInput[] = []
-
-      if (ops.eq !== undefined) {
-        if (type === 'boolean') {
-          let value = ops.eq as unknown
-          if (typeof value === 'string') {
-            const s = value.toLowerCase()
-            if (s === 'true') value = true
-            else if (s === 'false') value = false
-            else {
-              throw new BadRequestException(
-                `Field ${apiField} expects true/false`,
-              )
-            }
-          }
-          if (typeof value !== 'boolean') {
+    if (type === 'boolean') {
+      const coerced: boolean[] = []
+      for (const v of values) {
+        if (typeof v === 'boolean') {
+          coerced.push(v)
+        } else if (typeof v === 'string') {
+          const s = v.toLowerCase()
+          if (s === 'true') coerced.push(true)
+          else if (s === 'false') coerced.push(false)
+          else
             throw new BadRequestException(
-              `Field ${apiField} expects a boolean for eq`,
+              `Field ${apiField} only accepts true/false`,
             )
-          }
-          clauses.push({ [prismaField]: value as boolean } as never)
         } else {
-          if (typeof ops.eq !== 'string') {
-            throw new BadRequestException(
-              `Field ${apiField} expects a string for eq`,
-            )
-          }
-          if (ops.eq.length > PeopleService.API_FIELD_MAX_CHARS) {
-            throw new BadRequestException(
-              `Value for ${apiField} exceeds ${PeopleService.API_FIELD_MAX_CHARS} characters`,
-            )
-          }
-          clauses.push({
-            [prismaField]: { equals: ops.eq, mode: 'insensitive' },
-          } as never)
-        }
-      }
-
-      if (ops.in !== undefined) {
-        const values = Array.isArray(ops.in) ? ops.in : [ops.in]
-        if (!values.length) continue
-        if (values.length > PeopleService.API_FIELD_MAX_VALUES) {
           throw new BadRequestException(
-            `Too many values for ${apiField}. Max allowed is ${PeopleService.API_FIELD_MAX_VALUES}`,
+            `Field ${apiField} only accepts boolean values`,
           )
         }
-        if (type === 'boolean') {
-          const coerced: boolean[] = []
-          for (const v of values) {
-            if (typeof v === 'boolean') {
-              coerced.push(v)
-            } else if (typeof v === 'string') {
-              const s = v.toLowerCase()
-              if (s === 'true') coerced.push(true)
-              else if (s === 'false') coerced.push(false)
-              else
-                throw new BadRequestException(
-                  `Field ${apiField} only accepts true/false`,
-                )
-            } else {
-              throw new BadRequestException(
-                `Field ${apiField} only accepts boolean values`,
-              )
-            }
-          }
-          clauses.push({ [prismaField]: { in: coerced } } as never)
-        } else {
-          // string case-insensitive IN -> OR of equals with mode insensitive
-          const perValueClauses: Prisma.VoterWhereInput[] = []
-          for (const v of values) {
-            if (typeof v !== 'string') {
-              throw new BadRequestException(
-                `Field ${apiField} only accepts string values`,
-              )
-            }
-            if (v.length > PeopleService.API_FIELD_MAX_CHARS) {
-              throw new BadRequestException(
-                `Value for ${apiField} exceeds ${PeopleService.API_FIELD_MAX_CHARS} characters`,
-              )
-            }
-            perValueClauses.push({
-              [prismaField]: { equals: v, mode: 'insensitive' },
-            } as never)
-          }
-          if (perValueClauses.length === 1) {
-            clauses.push(perValueClauses[0])
-          } else {
-            clauses.push({ OR: perValueClauses })
-          }
+      }
+      return { [prismaField]: { in: coerced } } as never
+    } else {
+      // string case-insensitive IN -> OR of equals with mode insensitive
+      const perValueClauses: Prisma.VoterWhereInput[] = []
+      for (const v of values) {
+        if (typeof v !== 'string') {
+          throw new BadRequestException(
+            `Field ${apiField} only accepts string values`,
+          )
         }
+        if (v.length > PeopleService.API_FIELD_MAX_CHARS) {
+          throw new BadRequestException(
+            `Value for ${apiField} exceeds ${PeopleService.API_FIELD_MAX_CHARS} characters`,
+          )
+        }
+        perValueClauses.push({
+          [prismaField]: { equals: v, mode: 'insensitive' },
+        } as never)
       }
-
-      if (ops.is === 'null') {
-        clauses.push({ [prismaField]: null } as never)
-      } else if (ops.is === 'not_null') {
-        clauses.push({ NOT: { [prismaField]: null } } as never)
-      }
-
-      // If we have multiple clauses for this field that must be ORed (e.g., IN + is:null)
-      if (clauses.length === 1) {
-        const single = clauses[0]
-        if (single) andClauses.push(single)
-      } else if (clauses.length > 1) {
-        andClauses.push({ OR: clauses })
+      if (perValueClauses.length === 1) {
+        return perValueClauses[0]
+      } else {
+        return { OR: perValueClauses }
       }
     }
+  }
 
+  private processNullOperation(
+    prismaField: string,
+    isOperator: 'null' | 'not_null',
+  ): Prisma.VoterWhereInput {
+    if (isOperator === 'null') {
+      return { [prismaField]: null } as never
+    } else {
+      return { NOT: { [prismaField]: null } } as never
+    }
+  }
+
+  private combineFieldClauses(
+    clauses: Prisma.VoterWhereInput[],
+    andClauses: Prisma.VoterWhereInput[],
+  ): void {
+    // If we have multiple clauses for this field that must be ORed (e.g., IN + is:null)
+    if (clauses.length === 1) {
+      const single = clauses[0]
+      if (single) andClauses.push(single)
+    } else if (clauses.length > 1) {
+      andClauses.push({ OR: clauses })
+    }
+  }
+
+  private finalizeWhereClause(
+    where: Prisma.VoterWhereInput,
+    andClauses: Prisma.VoterWhereInput[],
+  ): Prisma.VoterWhereInput {
     if (andClauses.length) {
       if (where.AND) {
         andClauses.unshift(
@@ -542,7 +538,75 @@ export class PeopleService {
       }
       where.AND = andClauses
     }
-
     return where
+  }
+
+  private validateDemographicFilter(filter: DemographicFilter): string[] {
+    const fieldNames = Object.keys(filter)
+    // enforce max fields
+    if (fieldNames.length > PeopleService.MAX_FIELDS) {
+      throw new BadRequestException(
+        `Too many fields in filter. Max allowed is ${PeopleService.MAX_FIELDS}`,
+      )
+    }
+
+    // validate field names
+    for (const apiField of fieldNames) {
+      const spec = DEMOGRAPHIC_FILTER_FIELDS[apiField]
+      if (!spec) {
+        throw new BadRequestException(`Unsupported filter field: ${apiField}`)
+      }
+    }
+
+    return fieldNames
+  }
+
+  private translateDemographicFilter(
+    filter: DemographicFilter,
+  ): Prisma.VoterWhereInput {
+    const where: Prisma.VoterWhereInput = {}
+    const andClauses: Prisma.VoterWhereInput[] = []
+
+    const fieldNames = this.validateDemographicFilter(filter)
+    if (!fieldNames.length) return where
+
+    for (const apiField of fieldNames) {
+      const spec = DEMOGRAPHIC_FILTER_FIELDS[apiField]
+      const ops = filter[apiField] as FieldFilterOps
+      const { prismaField, type } = spec
+
+      const clauses: Prisma.VoterWhereInput[] = []
+
+      if (ops.eq !== undefined) {
+        const eqClause = this.processEqualityOperation(
+          apiField,
+          prismaField,
+          type,
+          ops.eq,
+        )
+        clauses.push(eqClause)
+      }
+
+      if (ops.in !== undefined) {
+        const inClause = this.processInclusionOperation(
+          apiField,
+          prismaField,
+          type,
+          ops.in,
+        )
+        if (inClause) {
+          clauses.push(inClause)
+        }
+      }
+
+      if (ops.is === 'null' || ops.is === 'not_null') {
+        const nullClause = this.processNullOperation(prismaField, ops.is)
+        clauses.push(nullClause)
+      }
+
+      this.combineFieldClauses(clauses, andClauses)
+    }
+
+    return this.finalizeWhereClause(where, andClauses)
   }
 }
