@@ -168,6 +168,7 @@ export default $config({
         preferredBackupWindow: '07:00-09:00',
         storageEncrypted: true,
         skipFinalSnapshot: isDevelop ? true : undefined,
+        databaseInsightsMode: 'advanced'
       })
       const instanceCount = isProd ? 2 : 1
       for (let i = 0; i < instanceCount; i++) {
@@ -176,7 +177,7 @@ export default $config({
           {
             clusterIdentifier: peopleDbCluster.id,
             engine: 'aurora-postgresql',
-            instanceClass: isProd ? 'db.r6g.large' : 'db.t4g.medium',
+            instanceClass: isProd ? 'db.r6g.4xlarge' : 'db.t4g.medium',
             publiclyAccessible: false,
             dbSubnetGroupName: dbSubnetGroup.name,
           },

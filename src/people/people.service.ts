@@ -320,6 +320,14 @@ export class PeopleService {
       }
     }
 
+    // phones
+    if (filters.includes('cellPhoneFormatted')) {
+      where.VoterTelephones_CellPhoneFormatted = { not: null }
+    }
+    if (filters.includes('landlineFormatted')) {
+      where.VoterTelephones_LandlineFormatted = { not: null }
+    }
+
     // audience filters
     const turnoutOr: Prisma.VoterWhereInput[] = []
     if (filters.includes('audienceSuperVoters')) {

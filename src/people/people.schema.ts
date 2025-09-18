@@ -19,7 +19,27 @@ const allowedFilters = [
   'genderFemale',
   'genderUnknown',
   'audienceRequest',
+  'cellPhoneFormatted',
+  'landlineFormatted',
 ] as const
+
+// Accepts: array values, single value, or a JSON-like array string
+// Example supported strings: "[\"a\",\"b\"]" or "['a','b']"
+const coerceArray = (v: unknown): unknown[] => {
+  if (Array.isArray(v)) return v
+  if (typeof v === 'string') {
+    const s = v.trim()
+    if (s.startsWith('[') && s.endsWith(']')) {
+      try {
+        const normalized = s.replace(/'/g, '"')
+        const parsed = JSON.parse(normalized)
+        if (Array.isArray(parsed)) return parsed
+      } catch {}
+    }
+    return s ? [s] : []
+  }
+  return v != null ? [v] : []
+}
 
 export const listPeopleSchema = z.object({
   state: z
@@ -38,7 +58,7 @@ export const listPeopleSchema = z.object({
   filters: z
     .preprocess(
       (v) => {
-        const values = Array.isArray(v) ? v : v ? [v] : []
+        const values = coerceArray(v)
         const legacyToCamel: Record<string, (typeof allowedFilters)[number]> = {
           audience_superVoters: 'audienceSuperVoters',
           audience_likelyVoters: 'audienceLikelyVoters',
@@ -56,6 +76,8 @@ export const listPeopleSchema = z.object({
           gender_female: 'genderFemale',
           gender_unknown: 'genderUnknown',
           audience_request: 'audienceRequest',
+          voterTelephones_CellPhoneFormatted: 'cellPhoneFormatted',
+          voterTelephones_LandlineFormatted: 'landlineFormatted',
         }
         return values.map((raw) => {
           const s = String(raw)
@@ -99,7 +121,7 @@ export const downloadPeopleSchema = z.object({
   filters: z
     .preprocess(
       (v) => {
-        const values = Array.isArray(v) ? v : v ? [v] : []
+        const values = coerceArray(v)
         const legacyToCamel: Record<string, (typeof allowedFilters)[number]> = {
           audience_superVoters: 'audienceSuperVoters',
           audience_likelyVoters: 'audienceLikelyVoters',
@@ -117,6 +139,8 @@ export const downloadPeopleSchema = z.object({
           gender_female: 'genderFemale',
           gender_unknown: 'genderUnknown',
           audience_request: 'audienceRequest',
+          voterTelephones_CellPhoneFormatted: 'cellPhoneFormatted',
+          voterTelephones_LandlineFormatted: 'landlineFormatted',
         }
         return values.map((raw) => {
           const s = String(raw)
