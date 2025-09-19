@@ -74,7 +74,11 @@ export class PeopleService {
     const take = resultsPerPage
     const skip = (page - 1) * resultsPerPage
 
-    const select = this.buildVoterSelect(full, electionYear)
+    const select = this.buildVoterSelect(
+      full,
+      electionYear,
+      filter as DemographicFilter,
+    )
 
     const [totalResults, people] = await Promise.all([
       model.count({ where }),
@@ -138,7 +142,11 @@ export class PeopleService {
       electionYear,
     })
 
-    const select = this.buildVoterSelect(full, electionYear)
+    const select = this.buildVoterSelect(
+      full,
+      electionYear,
+      filter as DemographicFilter,
+    )
     const selectedColumns = Object.keys(select)
     const headers = [...selectedColumns, 'electionLocation', 'electionType']
 
@@ -205,6 +213,7 @@ export class PeopleService {
   private buildVoterSelect(
     full: boolean,
     electionYear: number,
+    _demographicFilter: DemographicFilter,
   ): Prisma.VoterSelect {
     const isEvenYear = electionYear % 2 === 0
     if (full) {
@@ -261,6 +270,8 @@ export class PeopleService {
         ] = true
       }
 
+      this.addAllDemographicColumnsToSelect(select)
+
       return select
     }
     const minimal: Prisma.VoterSelect = {
@@ -272,7 +283,16 @@ export class PeopleService {
       Residence_Addresses_State: true,
       Residence_Addresses_Zip: true,
     }
+
+    this.addAllDemographicColumnsToSelect(minimal)
+
     return minimal
+  }
+
+  private addAllDemographicColumnsToSelect(select: Prisma.VoterSelect): void {
+    for (const spec of Object.values(DEMOGRAPHIC_FILTER_FIELDS)) {
+      ;(select as Record<string, boolean>)[spec.prismaField as string] = true
+    }
   }
 
   private buildWhere(options: {
@@ -309,7 +329,6 @@ export class PeopleService {
     if (filters.includes('genderUnknown')) genderValues.push('')
     if (genderValues.length) where.Gender = { in: genderValues }
 
-    // parties (TODO verify exact strings)
     const partyValues: string[] = []
     if (filters.includes('partyDemocrat')) partyValues.push('Democratic')
     if (filters.includes('partyRepublican')) partyValues.push('Republican')
