@@ -19,7 +19,6 @@ export default $config({
   },
   async run() {
     const aws = await import('@pulumi/aws')
-    const codebuild: any = await import('@pulumi/aws/codebuild/index.js')
     const pulumi = await import('@pulumi/pulumi')
     const vpc = sst.aws.Vpc.get('api', 'vpc-0763fa52c32ebcf6a')
 
@@ -51,7 +50,7 @@ export default $config({
     const cluster = new sst.aws.Cluster('fargate', {
       vpc,
       transform: {
-        cluster: (clusterArgs, _opts, _name) => {
+        cluster: (clusterArgs, opts, name) => {
           clusterArgs.name = `people-api-${$app.stage}-fargateCluster`
         },
       },
@@ -68,7 +67,7 @@ export default $config({
 
     if (isProd) {
       secretArn =
-        'arn:aws:secretsmanager:us-west-2:333022194791:secret:PEOPLE_API_PROD-7dFZbr'
+        'arn:aws:secretsmanager:us-west-2:333022194791:secret:GP_PEOPLE_API_PROD-tXhM8a'
     } else if (isDevelop) {
       secretArn =
         'arn:aws:secretsmanager:us-west-2:333022194791:secret:PEOPLE_API_DEV-3oNjn3'
@@ -114,14 +113,11 @@ export default $config({
 
     const clusterIdentifier = isProd ? 'gp-people-db-prod' : 'gp-people-db-dev'
 
-    // Keep managing the existing Subnet Group resource so Pulumi/SST does not attempt deletion
-    const dbSubnetGroup = new aws.rds.SubnetGroup(
-      `people-db-subnets-${$app.stage}`,
-      {
-        subnetIds: ['subnet-053357b931f0524d4', 'subnet-0bb591861f72dcb7f'],
-        tags: { Name: `gp-people-db-${$app.stage}` },
-      },
-    )
+    // Align with election-api: use existing subnet group by name
+    const subnetGroupName = isDevelop
+      ? 'api-rds-subnet-group'
+      : `api-${$app.stage}-rds-subnet-group`
+    const subnetGroup = await aws.rds.getSubnetGroup({ name: subnetGroupName })
 
     // Use election-api style RDS Security Group resolution
     let rdsSecurityGroupName: string
@@ -162,13 +158,12 @@ export default $config({
         masterUsername: dbUser!,
         masterPassword: dbPassword!,
         databaseName: dbName!,
-        dbSubnetGroupName: dbSubnetGroup.name,
+        dbSubnetGroupName: subnetGroup.name,
         vpcSecurityGroupIds: [rdsSecurityGroup.id],
         backupRetentionPeriod: isProd ? 7 : 1,
         preferredBackupWindow: '07:00-09:00',
         storageEncrypted: true,
         skipFinalSnapshot: isDevelop ? true : undefined,
-        databaseInsightsMode: 'advanced'
       })
       const instanceCount = isProd ? 2 : 1
       for (let i = 0; i < instanceCount; i++) {
@@ -179,7 +174,7 @@ export default $config({
             engine: 'aurora-postgresql',
             instanceClass: isProd ? 'db.r6g.large' : 'db.t4g.medium',
             publiclyAccessible: false,
-            dbSubnetGroupName: dbSubnetGroup.name,
+            dbSubnetGroupName: subnetGroup.name,
           },
         )
       }
@@ -207,7 +202,7 @@ export default $config({
           }
         : isDevelop
           ? {
-              spot: { weight: 1, base: 1 },
+              spot: { weight: 1, base: 0 },
             }
           : {
               spot: { weight: 1, base: 1 },
@@ -215,7 +210,7 @@ export default $config({
       memory: isProd ? '4 GB' : '2 GB',
       cpu: isProd ? '1 vCPU' : '0.5 vCPU',
       scaling: {
-        min: isProd ? 2 : isDevelop ? 1 : 1,
+        min: isProd ? 2 : isDevelop ? 0 : 1,
         max: isProd ? 16 : 4,
         cpuUtilization: 50,
         memoryUtilization: 50,
@@ -249,63 +244,53 @@ export default $config({
       },
     })
 
-    // CodeBuild role: adopt if it exists, otherwise create
-    let codeBuildRole: aws.iam.Role
-    try {
-      const existing = await aws.iam.getRole({ name: 'codebuild-service-role' })
-      codeBuildRole = aws.iam.Role.get('codebuild-service-role', existing.name)
-    } catch {
-      codeBuildRole = new aws.iam.Role('codebuild-service-role', {
-        assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({
-          Service: 'codebuild.amazonaws.com',
-        }),
-        managedPolicyArns: ['arn:aws:iam::aws:policy/AdministratorAccess'],
-      })
-    }
+    const codeBuildRole = new aws.iam.Role('codebuild-service-role', {
+      assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({
+        Service: 'codebuild.amazonaws.com',
+      }),
+      managedPolicyArns: ['arn:aws:iam::aws:policy/AdministratorAccess'],
+    })
 
-    // CodeBuild project: adopt if it exists, otherwise create
-    const projectName = `people-api-deploy-build-${$app.stage}`
-    try {
-      const existingProject = await codebuild.getProject({
-        name: projectName,
-      })
-      codebuild.Project.get('people-api-deploy-build', existingProject.name)
-    } catch {
-      new codebuild.Project('people-api-deploy-build', {
-        name: projectName,
-        serviceRole: codeBuildRole.arn,
-        environment: {
-          computeType: 'BUILD_GENERAL1_LARGE',
-          image: 'aws/codebuild/standard:6.0',
-          type: 'LINUX_CONTAINER',
-          privilegedMode: true,
-          environmentVariables: [
-            { name: 'STAGE', value: $app.stage, type: 'PLAINTEXT' },
-            {
-              name: 'CLUSTER_NAME',
-              value: `people-api-${$app.stage}-fargateCluster`,
-              type: 'PLAINTEXT',
-            },
-            {
-              name: 'SERVICE_NAME',
-              value: `people-api-${$app.stage}`,
-              type: 'PLAINTEXT',
-            },
-          ],
-        },
-        vpcConfig: {
-          vpcId: 'vpc-0763fa52c32ebcf6a',
-          subnets: ['subnet-053357b931f0524d4', 'subnet-0bb591861f72dcb7f'],
-          securityGroupIds: ['sg-01de8d67b0f0ec787'],
-        },
-        source: {
-          type: 'GITHUB',
-          location: 'https://github.com/thegoodparty/people-api.git',
-          buildspec: 'deploy/buildspec.yml',
-        },
-        artifacts: { type: 'NO_ARTIFACTS' },
-      })
-    }
+    new aws.codebuild.Project('people-api-deploy-build', {
+      name: `people-api-deploy-build-${$app.stage}`,
+      serviceRole: codeBuildRole.arn,
+      environment: {
+        computeType: 'BUILD_GENERAL1_LARGE',
+        image: 'aws/codebuild/standard:6.0',
+        type: 'LINUX_CONTAINER',
+        privilegedMode: true,
+        environmentVariables: [
+          {
+            name: 'STAGE',
+            value: $app.stage,
+            type: 'PLAINTEXT',
+          },
+          {
+            name: 'CLUSTER_NAME',
+            value: `people-api-${$app.stage}-fargateCluster`,
+            type: 'PLAINTEXT',
+          },
+          {
+            name: 'SERVICE_NAME',
+            value: `people-api-${$app.stage}`,
+            type: 'PLAINTEXT',
+          },
+        ],
+      },
+      vpcConfig: {
+        vpcId: 'vpc-0763fa52c32ebcf6a',
+        subnets: ['subnet-053357b931f0524d4', 'subnet-0bb591861f72dcb7f'],
+        securityGroupIds: ['sg-01de8d67b0f0ec787'],
+      },
+      source: {
+        type: 'GITHUB',
+        location: 'https://github.com/thegoodparty/people-api.git',
+        buildspec: 'deploy/buildspec.yml',
+      },
+      artifacts: {
+        type: 'NO_ARTIFACTS',
+      },
+    })
 
     new aws.iam.Policy('github-actions-policy', {
       description: 'Limited policy for Github Actions to trigger CodeBuild',

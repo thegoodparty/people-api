@@ -25,6 +25,26 @@ export const DEMOGRAPHIC_FILTER_FIELDS: Record<string, FilterFieldMetadata> = {
   registeredVoter: { prismaField: 'Registered_Voter', type: 'boolean' },
   veteranStatus: { prismaField: 'Veteran_Status', type: 'string' },
   voterStatus: { prismaField: 'Voter_Status', type: 'string' },
+  // Fields from the legacy filters approach
+  gender: { prismaField: 'Gender', type: 'string' },
+  partiesDescription: { prismaField: 'Parties_Description', type: 'string' },
+  ageInt: { prismaField: 'Age_Int', type: 'string' },
+  voterTelephonesCellPhoneFormatted: {
+    prismaField: 'VoterTelephones_CellPhoneFormatted',
+    type: 'string',
+  },
+  voterTelephonesLandlineFormatted: {
+    prismaField: 'VoterTelephones_LandlineFormatted',
+    type: 'string',
+  },
+  votingPerformanceEvenYearGeneral: {
+    prismaField: 'VotingPerformanceEvenYearGeneral',
+    type: 'string',
+  },
+  votingPerformanceMinorElection: {
+    prismaField: 'VotingPerformanceMinorElection',
+    type: 'string',
+  },
 }
 
 export type FilterIsOperator = 'null' | 'not_null'

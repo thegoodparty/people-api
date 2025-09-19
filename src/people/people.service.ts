@@ -68,6 +68,7 @@ export class PeopleService {
       filters,
       performanceField,
       demographicFilter: filter as DemographicFilter,
+      electionYear,
     })
 
     const take = resultsPerPage
@@ -134,6 +135,7 @@ export class PeopleService {
       filters,
       performanceField,
       demographicFilter: filter as DemographicFilter,
+      electionYear,
     })
 
     const select = this.buildVoterSelect(full, electionYear)
@@ -280,6 +282,7 @@ export class PeopleService {
     filters: AllowedFilter[]
     performanceField: PerformanceFieldKey
     demographicFilter: DemographicFilter
+    electionYear: number
   }): Prisma.VoterWhereInput {
     const {
       state,
@@ -288,6 +291,7 @@ export class PeopleService {
       filters,
       performanceField,
       demographicFilter,
+      electionYear,
     } = options
     const where: Prisma.VoterWhereInput = { State: state }
 
@@ -395,7 +399,10 @@ export class PeopleService {
     }
 
     // demographic filter translation
-    const demographicWhere = this.translateDemographicFilter(demographicFilter)
+    const demographicWhere = this.translateDemographicFilter(
+      demographicFilter,
+      electionYear,
+    )
     if (Object.keys(demographicWhere).length) {
       Object.assign(where, demographicWhere)
     }
@@ -563,6 +570,7 @@ export class PeopleService {
 
   private translateDemographicFilter(
     filter: DemographicFilter,
+    electionYear: number,
   ): Prisma.VoterWhereInput {
     const where: Prisma.VoterWhereInput = {}
     const andClauses: Prisma.VoterWhereInput[] = []
@@ -573,7 +581,26 @@ export class PeopleService {
     for (const apiField of fieldNames) {
       const spec = DEMOGRAPHIC_FILTER_FIELDS[apiField]
       const ops = filter[apiField] as FieldFilterOps
-      const { prismaField, type } = spec
+      const { type } = spec
+      let { prismaField } = spec
+
+      // Handle voting performance fields dynamically based on election year
+      if (
+        apiField === 'votingPerformanceEvenYearGeneral' ||
+        apiField === 'votingPerformanceMinorElection'
+      ) {
+        const isEvenYear = electionYear % 2 === 0
+        if (apiField === 'votingPerformanceEvenYearGeneral' && !isEvenYear) {
+          continue // Skip this field for odd years
+        }
+        if (apiField === 'votingPerformanceMinorElection' && isEvenYear) {
+          continue // Skip this field for even years
+        }
+        // Use the appropriate field based on election year
+        prismaField = isEvenYear
+          ? 'VotingPerformanceEvenYearGeneral'
+          : 'VotingPerformanceMinorElection'
+      }
 
       const clauses: Prisma.VoterWhereInput[] = []
 
