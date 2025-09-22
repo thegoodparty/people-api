@@ -329,12 +329,76 @@ export class PeopleService {
     if (filters.includes('genderUnknown')) genderValues.push('')
     if (genderValues.length) where.Gender = { in: genderValues }
 
-    const partyValues: string[] = []
-    if (filters.includes('partyDemocrat')) partyValues.push('Democratic')
-    if (filters.includes('partyRepublican')) partyValues.push('Republican')
-    if (filters.includes('partyIndependent'))
-      partyValues.push('Non-Partisan', 'Other')
-    if (partyValues.length) where.Parties_Description = { in: partyValues }
+    // const partyValues: string[] = []
+    // if (filters.includes('partyDemocrat')) partyValues.push('Democratic')
+    // if (filters.includes('partyRepublican')) partyValues.push('Republican')
+    // if (filters.includes('partyIndependent'))
+    //   partyValues.push('Non-Partisan', 'Other')
+    // if (partyValues.length) where.Parties_Description = { in: partyValues }
+    // parties
+    const wantsDemocratic = filters.includes('partyDemocrat')
+    const wantsRepublican = filters.includes('partyRepublican')
+    const wantsIndependentOrOther = filters.includes('partyIndependent')
+
+    if (wantsDemocratic || wantsRepublican || wantsIndependentOrOther) {
+      // Build an OR of acceptable party conditions to correctly support
+      // "independent" meaning everything that is NOT Democratic/Republican,
+      // and combinations like Republican + Independent => exclude Democrats.
+      const partyOrClauses: Prisma.VoterWhereInput[] = []
+
+      // Explicit party inclusions (case-insensitive)
+      if (wantsDemocratic) {
+        partyOrClauses.push({
+          Parties_Description: { equals: 'Democratic', mode: 'insensitive' },
+        })
+      }
+      if (wantsRepublican) {
+        partyOrClauses.push({
+          Parties_Description: { equals: 'Republican', mode: 'insensitive' },
+        })
+      }
+
+      // Independent means: anything non-null and non-empty except Democratic or Republican (case-insensitive)
+      if (wantsIndependentOrOther) {
+        partyOrClauses.push({
+          AND: [
+            {
+              NOT: {
+                Parties_Description: {
+                  equals: 'Democratic',
+                  mode: 'insensitive',
+                },
+              },
+            },
+            {
+              NOT: {
+                Parties_Description: {
+                  equals: 'Republican',
+                  mode: 'insensitive',
+                },
+              },
+            },
+            { Parties_Description: { not: '' } },
+            { Parties_Description: { not: null } },
+          ],
+        })
+      }
+
+      // If all three were selected, this effectively means "everyone"; in that
+      // case we can skip adding a filter altogether. Otherwise apply OR.
+      const selectsAll =
+        wantsDemocratic && wantsRepublican && wantsIndependentOrOther
+      if (!selectsAll && partyOrClauses.length) {
+        const andClauses: Prisma.VoterWhereInput[] = []
+        if (where.AND) {
+          andClauses.push(
+            ...(Array.isArray(where.AND) ? where.AND : [where.AND]),
+          )
+        }
+        andClauses.push({ OR: partyOrClauses })
+        where.AND = andClauses
+      }
+    }
 
     // age buckets on indexed integer column
     const usesAge = filters.some((f) =>
