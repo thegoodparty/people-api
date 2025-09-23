@@ -1,6 +1,12 @@
 import { PrismaService } from 'src/prisma/prisma.service'
 import { Prisma } from '@prisma/client'
 import { DownloadPeopleDTO, ListPeopleDTO } from './people.schema'
+import {
+  DEMOGRAPHIC_FILTER_FIELDS,
+  DemographicFilter,
+  FieldFilterOps,
+  FilterFieldType,
+} from './people.filters'
 import { BadRequestException, Injectable } from '@nestjs/common'
 import {
   AllowedFilter,
@@ -20,6 +26,10 @@ import type { RowMap } from '@fast-csv/format'
 export class PeopleService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private static readonly MAX_FIELDS = 15
+  private static readonly API_FIELD_MAX_CHARS = 100
+  private static readonly API_FIELD_MAX_VALUES = 50
+
   async findPeople(dto: ListPeopleDTO) {
     const {
       state,
@@ -30,6 +40,7 @@ export class PeopleService {
       page,
       filters = [],
       full = true,
+      filter = {},
     } = dto
     const model = this.prisma.voter
 
@@ -56,12 +67,18 @@ export class PeopleService {
       districtName,
       filters,
       performanceField,
+      demographicFilter: filter as DemographicFilter,
+      electionYear,
     })
 
     const take = resultsPerPage
     const skip = (page - 1) * resultsPerPage
 
-    const select = this.buildVoterSelect(full, electionYear)
+    const select = this.buildVoterSelect(
+      full,
+      electionYear,
+      filter as DemographicFilter,
+    )
 
     const [totalResults, people] = await Promise.all([
       model.count({ where }),
@@ -89,6 +106,7 @@ export class PeopleService {
       state,
       electionYear = new Date().getFullYear(),
       full = true,
+      filter = {},
       filters = [],
     } = dto
 
@@ -120,9 +138,15 @@ export class PeopleService {
       districtName,
       filters,
       performanceField,
+      demographicFilter: filter as DemographicFilter,
+      electionYear,
     })
 
-    const select = this.buildVoterSelect(full, electionYear)
+    const select = this.buildVoterSelect(
+      full,
+      electionYear,
+      filter as DemographicFilter,
+    )
     const selectedColumns = Object.keys(select)
     const headers = [...selectedColumns, 'electionLocation', 'electionType']
 
@@ -189,6 +213,7 @@ export class PeopleService {
   private buildVoterSelect(
     full: boolean,
     electionYear: number,
+    _demographicFilter: DemographicFilter,
   ): Prisma.VoterSelect {
     const isEvenYear = electionYear % 2 === 0
     if (full) {
@@ -245,6 +270,8 @@ export class PeopleService {
         ] = true
       }
 
+      this.addAllDemographicColumnsToSelect(select)
+
       return select
     }
     const minimal: Prisma.VoterSelect = {
@@ -256,7 +283,16 @@ export class PeopleService {
       Residence_Addresses_State: true,
       Residence_Addresses_Zip: true,
     }
+
+    this.addAllDemographicColumnsToSelect(minimal)
+
     return minimal
+  }
+
+  private addAllDemographicColumnsToSelect(select: Prisma.VoterSelect): void {
+    for (const spec of Object.values(DEMOGRAPHIC_FILTER_FIELDS)) {
+      ;(select as Record<string, boolean>)[spec.prismaField as string] = true
+    }
   }
 
   private buildWhere(options: {
@@ -265,9 +301,18 @@ export class PeopleService {
     districtName?: string | undefined
     filters: AllowedFilter[]
     performanceField: PerformanceFieldKey
+    demographicFilter: DemographicFilter
+    electionYear: number
   }): Prisma.VoterWhereInput {
-    const { state, districtType, districtName, filters, performanceField } =
-      options
+    const {
+      state,
+      districtType,
+      districtName,
+      filters,
+      performanceField,
+      demographicFilter,
+      electionYear,
+    } = options
     const where: Prisma.VoterWhereInput = { State: state }
 
     if (districtType && districtName) {
@@ -284,13 +329,76 @@ export class PeopleService {
     if (filters.includes('genderUnknown')) genderValues.push('')
     if (genderValues.length) where.Gender = { in: genderValues }
 
-    // parties (TODO verify exact strings)
-    const partyValues: string[] = []
-    if (filters.includes('partyDemocrat')) partyValues.push('Democratic')
-    if (filters.includes('partyRepublican')) partyValues.push('Republican')
-    if (filters.includes('partyIndependent'))
-      partyValues.push('Non-Partisan', 'Other')
-    if (partyValues.length) where.Parties_Description = { in: partyValues }
+    // const partyValues: string[] = []
+    // if (filters.includes('partyDemocrat')) partyValues.push('Democratic')
+    // if (filters.includes('partyRepublican')) partyValues.push('Republican')
+    // if (filters.includes('partyIndependent'))
+    //   partyValues.push('Non-Partisan', 'Other')
+    // if (partyValues.length) where.Parties_Description = { in: partyValues }
+    // parties
+    const wantsDemocratic = filters.includes('partyDemocrat')
+    const wantsRepublican = filters.includes('partyRepublican')
+    const wantsIndependentOrOther = filters.includes('partyIndependent')
+
+    if (wantsDemocratic || wantsRepublican || wantsIndependentOrOther) {
+      // Build an OR of acceptable party conditions to correctly support
+      // "independent" meaning everything that is NOT Democratic/Republican,
+      // and combinations like Republican + Independent => exclude Democrats.
+      const partyOrClauses: Prisma.VoterWhereInput[] = []
+
+      // Explicit party inclusions (case-insensitive)
+      if (wantsDemocratic) {
+        partyOrClauses.push({
+          Parties_Description: { equals: 'Democratic', mode: 'insensitive' },
+        })
+      }
+      if (wantsRepublican) {
+        partyOrClauses.push({
+          Parties_Description: { equals: 'Republican', mode: 'insensitive' },
+        })
+      }
+
+      // Independent means: anything non-null and non-empty except Democratic or Republican (case-insensitive)
+      if (wantsIndependentOrOther) {
+        partyOrClauses.push({
+          AND: [
+            {
+              NOT: {
+                Parties_Description: {
+                  equals: 'Democratic',
+                  mode: 'insensitive',
+                },
+              },
+            },
+            {
+              NOT: {
+                Parties_Description: {
+                  equals: 'Republican',
+                  mode: 'insensitive',
+                },
+              },
+            },
+            { Parties_Description: { not: '' } },
+            { Parties_Description: { not: null } },
+          ],
+        })
+      }
+
+      // If all three were selected, this effectively means "everyone"; in that
+      // case we can skip adding a filter altogether. Otherwise apply OR.
+      const selectsAll =
+        wantsDemocratic && wantsRepublican && wantsIndependentOrOther
+      if (!selectsAll && partyOrClauses.length) {
+        const andClauses: Prisma.VoterWhereInput[] = []
+        if (where.AND) {
+          andClauses.push(
+            ...(Array.isArray(where.AND) ? where.AND : [where.AND]),
+          )
+        }
+        andClauses.push({ OR: partyOrClauses })
+        where.AND = andClauses
+      }
+    }
 
     // age buckets on indexed integer column
     const usesAge = filters.some((f) =>
@@ -373,6 +481,242 @@ export class PeopleService {
       where.AND = andClauses
     }
 
+    // demographic filter translation
+    const demographicWhere = this.translateDemographicFilter(
+      demographicFilter,
+      electionYear,
+    )
+    if (Object.keys(demographicWhere).length) {
+      Object.assign(where, demographicWhere)
+    }
+
     return where
+  }
+
+  private processEqualityOperation(
+    apiField: string,
+    prismaField: string,
+    type: FilterFieldType,
+    value: unknown,
+  ): Prisma.VoterWhereInput {
+    if (type === 'boolean') {
+      let coercedValue = value
+      if (typeof value === 'string') {
+        const s = value.toLowerCase()
+        if (s === 'true') coercedValue = true
+        else if (s === 'false') coercedValue = false
+        else {
+          throw new BadRequestException(`Field ${apiField} expects true/false`)
+        }
+      }
+      if (typeof coercedValue !== 'boolean') {
+        throw new BadRequestException(
+          `Field ${apiField} expects a boolean for eq`,
+        )
+      }
+      return { [prismaField]: coercedValue as boolean } as never
+    } else {
+      if (typeof value !== 'string') {
+        throw new BadRequestException(
+          `Field ${apiField} expects a string for eq`,
+        )
+      }
+      if (value.length > PeopleService.API_FIELD_MAX_CHARS) {
+        throw new BadRequestException(
+          `Value for ${apiField} exceeds ${PeopleService.API_FIELD_MAX_CHARS} characters`,
+        )
+      }
+      return {
+        [prismaField]: { equals: value, mode: 'insensitive' },
+      } as never
+    }
+  }
+
+  private processInclusionOperation(
+    apiField: string,
+    prismaField: string,
+    type: FilterFieldType,
+    inValue: unknown[] | unknown,
+  ): Prisma.VoterWhereInput | null {
+    const values = Array.isArray(inValue) ? inValue : [inValue]
+    if (!values.length) return null
+    if (values.length > PeopleService.API_FIELD_MAX_VALUES) {
+      throw new BadRequestException(
+        `Too many values for ${apiField}. Max allowed is ${PeopleService.API_FIELD_MAX_VALUES}`,
+      )
+    }
+
+    if (type === 'boolean') {
+      const coerced: boolean[] = []
+      for (const v of values) {
+        if (typeof v === 'boolean') {
+          coerced.push(v)
+        } else if (typeof v === 'string') {
+          const s = v.toLowerCase()
+          if (s === 'true') coerced.push(true)
+          else if (s === 'false') coerced.push(false)
+          else
+            throw new BadRequestException(
+              `Field ${apiField} only accepts true/false`,
+            )
+        } else {
+          throw new BadRequestException(
+            `Field ${apiField} only accepts boolean values`,
+          )
+        }
+      }
+      return { [prismaField]: { in: coerced } } as never
+    } else {
+      // string case-insensitive IN -> OR of equals with mode insensitive
+      const perValueClauses: Prisma.VoterWhereInput[] = []
+      for (const v of values) {
+        if (typeof v !== 'string') {
+          throw new BadRequestException(
+            `Field ${apiField} only accepts string values`,
+          )
+        }
+        if (v.length > PeopleService.API_FIELD_MAX_CHARS) {
+          throw new BadRequestException(
+            `Value for ${apiField} exceeds ${PeopleService.API_FIELD_MAX_CHARS} characters`,
+          )
+        }
+        perValueClauses.push({
+          [prismaField]: { equals: v, mode: 'insensitive' },
+        } as never)
+      }
+      if (perValueClauses.length === 1) {
+        return perValueClauses[0]
+      } else {
+        return { OR: perValueClauses }
+      }
+    }
+  }
+
+  private processNullOperation(
+    prismaField: string,
+    isOperator: 'null' | 'not_null',
+  ): Prisma.VoterWhereInput {
+    if (isOperator === 'null') {
+      return { [prismaField]: null } as never
+    } else {
+      return { NOT: { [prismaField]: null } } as never
+    }
+  }
+
+  private combineFieldClauses(
+    clauses: Prisma.VoterWhereInput[],
+    andClauses: Prisma.VoterWhereInput[],
+  ): void {
+    // If we have multiple clauses for this field that must be ORed (e.g., IN + is:null)
+    if (clauses.length === 1) {
+      const single = clauses[0]
+      if (single) andClauses.push(single)
+    } else if (clauses.length > 1) {
+      andClauses.push({ OR: clauses })
+    }
+  }
+
+  private finalizeWhereClause(
+    where: Prisma.VoterWhereInput,
+    andClauses: Prisma.VoterWhereInput[],
+  ): Prisma.VoterWhereInput {
+    if (andClauses.length) {
+      if (where.AND) {
+        andClauses.unshift(
+          ...(Array.isArray(where.AND) ? where.AND : [where.AND]),
+        )
+      }
+      where.AND = andClauses
+    }
+    return where
+  }
+
+  private validateDemographicFilter(filter: DemographicFilter): string[] {
+    const fieldNames = Object.keys(filter)
+    // enforce max fields
+    if (fieldNames.length > PeopleService.MAX_FIELDS) {
+      throw new BadRequestException(
+        `Too many fields in filter. Max allowed is ${PeopleService.MAX_FIELDS}`,
+      )
+    }
+
+    // validate field names
+    for (const apiField of fieldNames) {
+      const spec = DEMOGRAPHIC_FILTER_FIELDS[apiField]
+      if (!spec) {
+        throw new BadRequestException(`Unsupported filter field: ${apiField}`)
+      }
+    }
+
+    return fieldNames
+  }
+
+  private translateDemographicFilter(
+    filter: DemographicFilter,
+    electionYear: number,
+  ): Prisma.VoterWhereInput {
+    const where: Prisma.VoterWhereInput = {}
+    const andClauses: Prisma.VoterWhereInput[] = []
+
+    const fieldNames = this.validateDemographicFilter(filter)
+    if (!fieldNames.length) return where
+
+    for (const apiField of fieldNames) {
+      const spec = DEMOGRAPHIC_FILTER_FIELDS[apiField]
+      const ops = filter[apiField] as FieldFilterOps
+      const { type } = spec
+      let { prismaField } = spec
+
+      // Handle voting performance fields dynamically based on election year
+      if (
+        apiField === 'votingPerformanceEvenYearGeneral' ||
+        apiField === 'votingPerformanceMinorElection'
+      ) {
+        const isEvenYear = electionYear % 2 === 0
+        if (apiField === 'votingPerformanceEvenYearGeneral' && !isEvenYear) {
+          continue // Skip this field for odd years
+        }
+        if (apiField === 'votingPerformanceMinorElection' && isEvenYear) {
+          continue // Skip this field for even years
+        }
+        // Use the appropriate field based on election year
+        prismaField = isEvenYear
+          ? 'VotingPerformanceEvenYearGeneral'
+          : 'VotingPerformanceMinorElection'
+      }
+
+      const clauses: Prisma.VoterWhereInput[] = []
+
+      if (ops.eq !== undefined) {
+        const eqClause = this.processEqualityOperation(
+          apiField,
+          prismaField,
+          type,
+          ops.eq,
+        )
+        clauses.push(eqClause)
+      }
+
+      if (ops.in !== undefined) {
+        const inClause = this.processInclusionOperation(
+          apiField,
+          prismaField,
+          type,
+          ops.in,
+        )
+        if (inClause) {
+          clauses.push(inClause)
+        }
+      }
+
+      if (ops.is === 'null' || ops.is === 'not_null') {
+        const nullClause = this.processNullOperation(prismaField, ops.is)
+        clauses.push(nullClause)
+      }
+
+      this.combineFieldClauses(clauses, andClauses)
+    }
+
+    return this.finalizeWhereClause(where, andClauses)
   }
 }
