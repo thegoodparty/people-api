@@ -245,6 +245,20 @@ export const statsSchema = z.object({
     .preprocess((v) => coerceArray(v), z.array(z.string()))
     .optional()
     .default(allowedCategoryDefaults as unknown as string[]),
+  // Numeric bucket definitions: map of fieldName -> array of [min,max] inclusive ranges
+  // Example: { ageInt: [[18,25],[26,35],[36,50],[51,200]] }
+  numericBuckets: z
+    .record(
+      z
+        .array(
+          z
+            .tuple([z.coerce.number(), z.coerce.number()])
+            .refine((t) => t[0] <= t[1], 'Bucket min must be <= max'),
+        )
+        .refine((arr) => arr.length > 0, 'At least one bucket required'),
+    )
+    .optional()
+    .default({}),
   topN: z.coerce.number().int().min(1).max(50).optional().default(10),
 })
 

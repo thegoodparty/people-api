@@ -22,6 +22,7 @@ model Voter {
     CountyVoterID                          String?   @db.Text() // If available
     Education_Of_Person                    String?   @db.Text() // ConsumerData_Education_Of_Person
     Estimated_Income_Amount                String?   @db.Text() // ConsumerData_Estimated_Income_Amount
+    Estimated_Income_Amount_Int            Int?      @db.Integer // Numeric version for range queries and comparisons
     EthnicGroups_EthnicGroup1Desc          String?   @db.Text() // 
     Ethnic_Description                     String?   @db.Text() // one of approximately 100 ethnic categories covering about 90% of voters with the remaining voters classifed as unknown'.  See Ethnic tab.'
     Homeowner_Probability_Model            String?   @db.Text() // ConsumerData_Homeowner_Probability_Model: Home Owner, Probable Home Owner, Renter
@@ -615,6 +616,7 @@ model Voter {
     @@index([Business_Owner])
     @@index([Education_Of_Person])
     @@index([Estimated_Income_Amount])
+    @@index([Estimated_Income_Amount_Int])
     @@index([EthnicGroups_EthnicGroup1Desc])
     @@index([Homeowner_Probability_Model])
     @@index([Language_Code])

@@ -37,6 +37,38 @@ export class PeopleService {
   private static readonly MAX_FIELDS = 15
   private static readonly API_FIELD_MAX_CHARS = 100
   private static readonly API_FIELD_MAX_VALUES = 50
+  private static readonly DEFAULT_AGE_RANGES: [number, number][] = [
+    [18, 25],
+    [26, 35],
+    [36, 50],
+    [51, 200],
+  ]
+  private static readonly DEFAULT_INCOME_RANGES: [number, number][] = [
+    [0, 24999],
+    [25000, 50000],
+    [50001, 75000],
+    [75001, 100000],
+    [100001, 150000],
+    [150001, 1000000000],
+  ]
+  private validateDistrictType(districtType?: string): void {
+    if (!districtType) return
+    const isValidField = Object.values(Prisma.VoterScalarFieldEnum).includes(
+      districtType as Prisma.VoterScalarFieldEnum,
+    )
+    if (!isValidField) {
+      throw new BadRequestException(
+        `Unsupported districtType: ${districtType as string}`,
+      )
+    }
+  }
+
+  private getPerformanceField(electionYear: number): PerformanceFieldKey {
+    const isEvenYear = electionYear % 2 === 0
+    return isEvenYear
+      ? 'VotingPerformanceEvenYearGeneral'
+      : 'VotingPerformanceMinorElection'
+  }
 
   async findPeople(dto: ListPeopleDTO) {
     const {
@@ -53,21 +85,9 @@ export class PeopleService {
     const model = this.prisma.voter
 
     // Validate districtType against Prisma enum if provided
-    if (districtType) {
-      const isValidField = Object.values(Prisma.VoterScalarFieldEnum).includes(
-        districtType as Prisma.VoterScalarFieldEnum,
-      )
-      if (!isValidField) {
-        throw new BadRequestException(
-          `Unsupported districtType: ${districtType}`,
-        )
-      }
-    }
+    this.validateDistrictType(districtType)
 
-    const isEvenYear = electionYear % 2 === 0
-    const performanceField: PerformanceFieldKey = isEvenYear
-      ? 'VotingPerformanceEvenYearGeneral'
-      : 'VotingPerformanceMinorElection'
+    const performanceField = this.getPerformanceField(electionYear)
 
     const where = this.buildWhere({
       state,
@@ -124,21 +144,9 @@ export class PeopleService {
     const districtName = dto.districtName ?? dto.electionType
 
     // Validate districtType against Prisma enum if provided
-    if (districtType) {
-      const isValidField = Object.values(Prisma.VoterScalarFieldEnum).includes(
-        districtType as Prisma.VoterScalarFieldEnum,
-      )
-      if (!isValidField) {
-        throw new BadRequestException(
-          `Unsupported districtType: ${districtType as string}`,
-        )
-      }
-    }
+    this.validateDistrictType(districtType as string | undefined)
 
-    const isEvenYear = electionYear % 2 === 0
-    const performanceField: PerformanceFieldKey = isEvenYear
-      ? 'VotingPerformanceEvenYearGeneral'
-      : 'VotingPerformanceMinorElection'
+    const performanceField = this.getPerformanceField(electionYear)
 
     const where = this.buildWhere({
       state,
@@ -227,25 +235,14 @@ export class PeopleService {
       filters = [],
       filter = {},
       categories = [],
+      numericBuckets = {},
       topN = 10,
     } = dto
 
     // Validate districtType against Prisma enum if provided
-    if (districtType) {
-      const isValidField = Object.values(Prisma.VoterScalarFieldEnum).includes(
-        districtType as Prisma.VoterScalarFieldEnum,
-      )
-      if (!isValidField) {
-        throw new BadRequestException(
-          `Unsupported districtType: ${districtType as string}`,
-        )
-      }
-    }
+    this.validateDistrictType(districtType as string | undefined)
 
-    const isEvenYear = electionYear % 2 === 0
-    const performanceField: PerformanceFieldKey = isEvenYear
-      ? 'VotingPerformanceEvenYearGeneral'
-      : 'VotingPerformanceMinorElection'
+    const performanceField = this.getPerformanceField(electionYear)
 
     const where = this.buildWhere({
       state,
@@ -271,8 +268,20 @@ export class PeopleService {
 
     const wants = (name: string) => categorySet.has(name)
 
-    if (wants('age'))
-      pushTask('age', () => this.computeAgeBuckets(where, totalConstituents))
+    if (wants('age')) {
+      const ageRanges =
+        (numericBuckets as Record<string, [number, number][]>).ageInt ||
+        (numericBuckets as Record<string, [number, number][]>).Age_Int ||
+        PeopleService.DEFAULT_AGE_RANGES
+      pushTask('age', () =>
+        this.computeNumericBuckets(
+          where,
+          'Age_Int',
+          totalConstituents,
+          ageRanges,
+        ),
+      )
+    }
     if (wants('homeowner'))
       pushTask('homeowner', () =>
         this.computeMappedStringBuckets(
@@ -283,15 +292,47 @@ export class PeopleService {
           { includeRawDistribution: true },
         ),
       )
-    if (wants('income'))
-      pushTask('income', () =>
-        this.computeMappedStringBuckets(
-          where,
-          'Estimated_Income_Amount',
-          totalConstituents,
-          (v) => normalizeIncomeBucket(v),
-        ),
-      )
+    if (wants('income')) {
+      const incomeRanges =
+        (numericBuckets as Record<string, [number, number][]>)
+          .estimatedIncomeAmountInt ||
+        (numericBuckets as Record<string, [number, number][]>)
+          .Estimated_Income_Amount_Int
+
+      if (incomeRanges && incomeRanges.length) {
+        pushTask('income', () =>
+          this.computeNumericBuckets(
+            where,
+            'Estimated_Income_Amount_Int',
+            totalConstituents,
+            incomeRanges,
+          ),
+        )
+      } else {
+        // Prefer numeric defaults if available; otherwise fallback to string mapping
+        const defaultIncomeRanges = PeopleService.DEFAULT_INCOME_RANGES
+        pushTask('income', async () => {
+          const numeric = await this.computeNumericBuckets(
+            where,
+            'Estimated_Income_Amount_Int',
+            totalConstituents,
+            defaultIncomeRanges,
+          )
+          const sumKnown = (
+            numeric.buckets as Array<{ label: string; count: number }>
+          )
+            .filter((b) => b.label !== 'Unknown')
+            .reduce((acc, b) => acc + b.count, 0)
+          if (sumKnown > 0) return numeric
+          return this.computeMappedStringBuckets(
+            where,
+            'Estimated_Income_Amount',
+            totalConstituents,
+            (v) => normalizeIncomeBucket(v),
+          )
+        })
+      }
+    }
     if (wants('education'))
       pushTask('education', () =>
         this.computeMappedStringBuckets(
@@ -383,6 +424,40 @@ export class PeopleService {
     const buckets = [
       ...ranges.map((r, idx) => ({
         label: r.label,
+        count: counts[idx],
+        percent: computePercent(counts[idx], total),
+      })),
+      {
+        label: 'Unknown',
+        count: counts[counts.length - 1],
+        percent: computePercent(counts[counts.length - 1], total),
+      },
+    ]
+    return { buckets }
+  }
+
+  private async computeNumericBuckets(
+    baseWhere: Prisma.VoterWhereInput,
+    field: string,
+    total: number,
+    ranges: [number, number][],
+  ) {
+    const tasks = ranges.map(([min, max]) =>
+      this.prisma.voter.count({
+        where: {
+          ...baseWhere,
+          [field]: { gte: min, lte: max } as any,
+        } as any,
+      }),
+    )
+    const unknownTask = this.prisma.voter.count({
+      where: { ...baseWhere, [field]: null } as any,
+    })
+    const counts = await Promise.all([...tasks, unknownTask])
+
+    const buckets = [
+      ...ranges.map(([min, max], idx) => ({
+        label: `${min}-${max}`,
         count: counts[idx],
         percent: computePercent(counts[idx], total),
       })),
