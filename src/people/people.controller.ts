@@ -1,5 +1,5 @@
 import { Controller, Get, Query, Res } from '@nestjs/common'
-import { DownloadPeopleDTO, ListPeopleDTO } from './people.schema'
+import { DownloadPeopleDTO, ListPeopleDTO, StatsDTO } from './people.schema'
 import { PeopleService } from './people.service'
 import { FastifyReply } from 'fastify'
 
@@ -20,5 +20,10 @@ export class PeopleController {
     res.header('Content-Type', 'text/csv')
     res.header('Content-Disposition', 'attachment; filename="people.csv"')
     await this.peopleService.streamPeopleCsv(dto, res)
+  }
+
+  @Get('stats')
+  getStats(@Query() dto: StatsDTO) {
+    return this.peopleService.getStats(dto)
   }
 }

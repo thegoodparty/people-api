@@ -176,3 +176,76 @@ export const downloadPeopleSchema = z.object({
 })
 
 export class DownloadPeopleDTO extends createZodDto(downloadPeopleSchema) {}
+
+// ---- Stats DTO ----
+const allowedCategoryDefaults = [
+  'age',
+  'homeowner',
+  'income',
+  'education',
+  'familyChildren',
+  'familyMarital',
+] as const
+
+// Permit any DEMOGRAPHIC_FILTER_FIELDS key name too (validated at runtime in service)
+export const statsSchema = z.object({
+  state: z
+    .string()
+    .transform((v) => v.toUpperCase())
+    .refine((v) => STATE_CODES.includes(v), 'Invalid state code'),
+  // Keep flexible like download endpoint
+  districtType: z.string().optional(),
+  districtName: z.string().optional(),
+  electionYear: z
+    .preprocess(
+      (v) => (v === undefined ? new Date().getFullYear() : v),
+      z.coerce.number().int(),
+    )
+    .optional()
+    .default(new Date().getFullYear()),
+  filters: z
+    .preprocess(
+      (v) => {
+        const values = coerceArray(v)
+        const legacyToCamel: Record<string, (typeof allowedFilters)[number]> = {
+          audience_superVoters: 'audienceSuperVoters',
+          audience_likelyVoters: 'audienceLikelyVoters',
+          audience_unreliableVoters: 'audienceUnreliableVoters',
+          audience_unlikelyVoters: 'audienceUnlikelyVoters',
+          audience_firstTimeVoters: 'audienceFirstTimeVoters',
+          party_independent: 'partyIndependent',
+          party_democrat: 'partyDemocrat',
+          party_republican: 'partyRepublican',
+          age_18_25: 'age18_25',
+          age_25_35: 'age25_35',
+          age_35_50: 'age35_50',
+          age_50_plus: 'age50Plus',
+          gender_male: 'genderMale',
+          gender_female: 'genderFemale',
+          gender_unknown: 'genderUnknown',
+          audience_request: 'audienceRequest',
+          voterTelephones_CellPhoneFormatted: 'cellPhoneFormatted',
+          voterTelephones_LandlineFormatted: 'landlineFormatted',
+        }
+        return values.map((raw) => {
+          const s = String(raw)
+          return (
+            (legacyToCamel[s] as (typeof allowedFilters)[number]) ??
+            (s as unknown)
+          )
+        })
+      },
+      z.array(z.enum(allowedFilters)),
+    )
+    .optional()
+    .default([]),
+  filter: demographicFilterSchema.optional().default({}),
+  // categories can include defaults and/or any DEMOGRAPHIC_FILTER_FIELDS key; runtime validation in service
+  categories: z
+    .preprocess((v) => coerceArray(v), z.array(z.string()))
+    .optional()
+    .default(allowedCategoryDefaults as unknown as string[]),
+  topN: z.coerce.number().int().min(1).max(50).optional().default(10),
+})
+
+export class StatsDTO extends createZodDto(statsSchema) {}

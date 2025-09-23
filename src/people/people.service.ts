@@ -1,6 +1,6 @@
 import { PrismaService } from 'src/prisma/prisma.service'
 import { Prisma } from '@prisma/client'
-import { DownloadPeopleDTO, ListPeopleDTO } from './people.schema'
+import { DownloadPeopleDTO, ListPeopleDTO, StatsDTO } from './people.schema'
 import {
   DEMOGRAPHIC_FILTER_FIELDS,
   DemographicFilter,
@@ -21,6 +21,14 @@ import {
 import { FastifyReply } from 'fastify'
 import { format } from '@fast-csv/format'
 import type { RowMap } from '@fast-csv/format'
+import {
+  computePercent,
+  mergeTopNWithOther,
+  normalizeChildrenPresence,
+  normalizeEducationBucket,
+  normalizeHomeowner,
+  normalizeIncomeBucket,
+} from 'src/shared/util/stats'
 
 @Injectable()
 export class PeopleService {
@@ -208,6 +216,364 @@ export class PeopleService {
       res.raw.off('close', onClose)
       csvStream.end()
     }
+  }
+
+  async getStats(dto: StatsDTO) {
+    const {
+      state,
+      districtType,
+      districtName,
+      electionYear,
+      filters = [],
+      filter = {},
+      categories = [],
+      topN = 10,
+    } = dto
+
+    // Validate districtType against Prisma enum if provided
+    if (districtType) {
+      const isValidField = Object.values(Prisma.VoterScalarFieldEnum).includes(
+        districtType as Prisma.VoterScalarFieldEnum,
+      )
+      if (!isValidField) {
+        throw new BadRequestException(
+          `Unsupported districtType: ${districtType as string}`,
+        )
+      }
+    }
+
+    const isEvenYear = electionYear % 2 === 0
+    const performanceField: PerformanceFieldKey = isEvenYear
+      ? 'VotingPerformanceEvenYearGeneral'
+      : 'VotingPerformanceMinorElection'
+
+    const where = this.buildWhere({
+      state,
+      districtType: districtType as keyof Prisma.VoterWhereInput | undefined,
+      districtName,
+      filters,
+      performanceField,
+      demographicFilter: filter as DemographicFilter,
+      electionYear,
+    })
+
+    const totalConstituents = await this.prisma.voter.count({ where })
+
+    const categorySet = new Set<string>(categories)
+
+    const tasks: Array<Promise<[string, unknown]>> = []
+
+    const pushTask = (name: string, fn: () => Promise<unknown>) => {
+      tasks.push(
+        fn().then((result) => [name, result]) as Promise<[string, unknown]>,
+      )
+    }
+
+    const wants = (name: string) => categorySet.has(name)
+
+    if (wants('age'))
+      pushTask('age', () => this.computeAgeBuckets(where, totalConstituents))
+    if (wants('homeowner'))
+      pushTask('homeowner', () =>
+        this.computeMappedStringBuckets(
+          where,
+          'Homeowner_Probability_Model',
+          totalConstituents,
+          (v) => normalizeHomeowner(v),
+          { includeRawDistribution: true },
+        ),
+      )
+    if (wants('income'))
+      pushTask('income', () =>
+        this.computeMappedStringBuckets(
+          where,
+          'Estimated_Income_Amount',
+          totalConstituents,
+          (v) => normalizeIncomeBucket(v),
+        ),
+      )
+    if (wants('education'))
+      pushTask('education', () =>
+        this.computeMappedStringBuckets(
+          where,
+          'Education_Of_Person',
+          totalConstituents,
+          (v) => normalizeEducationBucket(v),
+        ),
+      )
+    if (wants('familyChildren'))
+      pushTask('familyChildren', () =>
+        this.computeMappedStringBuckets(
+          where,
+          'Presence_Of_Children',
+          totalConstituents,
+          (v) => normalizeChildrenPresence(v),
+          { forceYesNoUnknown: true },
+        ),
+      )
+    if (wants('familyMarital'))
+      pushTask('familyMarital', () =>
+        this.computeStringFieldTopN(
+          where,
+          'Marital_Status',
+          totalConstituents,
+          topN,
+        ),
+      )
+
+    // Support all DEMOGRAPHIC_FILTER_FIELDS as requestable facets
+    for (const [apiField, meta] of Object.entries(DEMOGRAPHIC_FILTER_FIELDS)) {
+      if (!wants(apiField)) continue
+      const prismaField = meta.prismaField as keyof Prisma.VoterWhereInput
+      if (meta.type === 'boolean') {
+        pushTask(apiField, () =>
+          this.computeBooleanBuckets(
+            where,
+            prismaField as string,
+            totalConstituents,
+          ),
+        )
+      } else {
+        pushTask(apiField, () =>
+          this.computeStringFieldTopN(
+            where,
+            prismaField as string,
+            totalConstituents,
+            topN,
+          ),
+        )
+      }
+    }
+
+    const results = await Promise.all(tasks)
+    const categoriesOut: Record<string, unknown> = {}
+    for (const [name, value] of results) categoriesOut[name] = value
+
+    return {
+      meta: {
+        state,
+        districtType,
+        districtName,
+        electionYear,
+        totalConstituents,
+      },
+      categories: categoriesOut,
+    }
+  }
+
+  private async computeAgeBuckets(
+    baseWhere: Prisma.VoterWhereInput,
+    total: number,
+  ) {
+    const ranges = [
+      { label: '18-25', where: { Age_Int: { gte: 18, lte: 25 } } },
+      { label: '25-35', where: { Age_Int: { gt: 25, lte: 35 } } },
+      { label: '35-50', where: { Age_Int: { gt: 35, lte: 50 } } },
+      { label: '50+', where: { Age_Int: { gt: 50 } } },
+    ]
+
+    const tasks = ranges.map((r) =>
+      this.prisma.voter.count({ where: { ...baseWhere, ...(r.where as any) } }),
+    )
+    const unknownTask = this.prisma.voter.count({
+      where: { ...baseWhere, Age_Int: null as unknown as never },
+    })
+    const counts = await Promise.all([...tasks, unknownTask])
+
+    const buckets = [
+      ...ranges.map((r, idx) => ({
+        label: r.label,
+        count: counts[idx],
+        percent: computePercent(counts[idx], total),
+      })),
+      {
+        label: 'Unknown',
+        count: counts[counts.length - 1],
+        percent: computePercent(counts[counts.length - 1], total),
+      },
+    ]
+    return { buckets }
+  }
+
+  private async computeBooleanBuckets(
+    baseWhere: Prisma.VoterWhereInput,
+    field: string,
+    total: number,
+  ) {
+    const [trueCount, falseCount, nullCount] = await Promise.all([
+      this.prisma.voter.count({
+        where: { ...baseWhere, [field]: true } as any,
+      }),
+      this.prisma.voter.count({
+        where: { ...baseWhere, [field]: false } as any,
+      }),
+      this.prisma.voter.count({
+        where: { ...baseWhere, [field]: null } as any,
+      }),
+    ])
+    const buckets = [
+      {
+        label: 'Yes',
+        count: trueCount,
+        percent: computePercent(trueCount, total),
+      },
+      {
+        label: 'No',
+        count: falseCount,
+        percent: computePercent(falseCount, total),
+      },
+      {
+        label: 'Unknown',
+        count: nullCount,
+        percent: computePercent(nullCount, total),
+      },
+    ]
+    return { buckets }
+  }
+
+  private async computeMappedStringBuckets<Label extends string>(
+    baseWhere: Prisma.VoterWhereInput,
+    field: string,
+    total: number,
+    mapToBucket: (value: string | null | undefined) => Label,
+    options?: { includeRawDistribution?: boolean; forceYesNoUnknown?: boolean },
+  ) {
+    const rows = await this.prisma.voter.groupBy({
+      by: [field as any],
+      where: { ...baseWhere, NOT: { [field]: null } as any },
+      _count: { _all: true },
+    })
+
+    const counts = new Map<Label, number>()
+    const raw: { label: string; count: number }[] = []
+    for (const r of rows as Array<
+      Record<string, unknown> & { _count: { _all: number } }
+    >) {
+      const rawValue = (r as any)[field] as string | null | undefined
+      const label = mapToBucket(rawValue)
+      counts.set(label, (counts.get(label) || 0) + r._count._all)
+      if (options?.includeRawDistribution) {
+        raw.push({ label: String(rawValue ?? ''), count: r._count._all })
+      }
+    }
+
+    // Unknown: null or empty string
+    const [nullCount, emptyCount] = await Promise.all([
+      this.prisma.voter.count({
+        where: { ...baseWhere, [field]: null } as any,
+      }),
+      this.prisma.voter.count({
+        where: { ...baseWhere, [field]: '' } as any,
+      }),
+    ])
+    const unknownCount = nullCount + emptyCount
+
+    // If forcing Yes/No/Unknown, ensure all three keys are present
+    const buckets: { label: string; count: number; percent: number }[] = []
+    for (const [label, count] of counts.entries()) {
+      buckets.push({
+        label: String(label),
+        count,
+        percent: computePercent(count, total),
+      })
+    }
+
+    if (options?.forceYesNoUnknown) {
+      const ensure = (label: Label) => {
+        if (!counts.has(label)) counts.set(label, 0)
+      }
+      // @ts-expect-error ensure typed labels exist when we know the domain
+      ensure('Yes')
+      // @ts-expect-error ensure typed labels exist when we know the domain
+      ensure('No')
+      // @ts-expect-error ensure typed labels exist when we know the domain
+      ensure('Unknown')
+      // Rebuild buckets in preferred order Yes/No/Unknown
+      const ordered: Array<Label> = [
+        'Yes',
+        'No',
+        'Unknown',
+      ] as unknown as Array<Label>
+      const remapped = ordered.map((lab) => {
+        const c =
+          lab === ('Unknown' as unknown as Label)
+            ? unknownCount
+            : counts.get(lab) || 0
+        return {
+          label: String(lab),
+          count: c,
+          percent: computePercent(c, total),
+        }
+      })
+      const result: any = { buckets: remapped }
+      if (options?.includeRawDistribution) result.rawModelBreakdown = raw
+      return result
+    }
+
+    // Add Unknown bucket
+    buckets.push({
+      label: 'Unknown',
+      count: unknownCount,
+      percent: computePercent(unknownCount, total),
+    })
+
+    const result: any = { buckets }
+    if (options?.includeRawDistribution) result.rawModelBreakdown = raw
+    return result
+  }
+
+  private async computeStringFieldTopN(
+    baseWhere: Prisma.VoterWhereInput,
+    field: string,
+    total: number,
+    topN: number,
+  ) {
+    const rows = await this.prisma.voter.groupBy({
+      by: [field as any],
+      where: { ...baseWhere, NOT: { [field]: null } as any },
+      _count: { _all: true },
+    })
+
+    const items = rows
+      .map((r: any) => ({
+        label: String(r[field] ?? ''),
+        count: r._count._all,
+      }))
+      .filter((r) => r.label !== '')
+
+    const [nullCount, emptyCount] = await Promise.all([
+      this.prisma.voter.count({
+        where: { ...baseWhere, [field]: null } as any,
+      }),
+      this.prisma.voter.count({
+        where: { ...baseWhere, [field]: '' } as any,
+      }),
+    ])
+    const unknownCount = nullCount + emptyCount
+
+    const { top, other } = mergeTopNWithOther(items, topN)
+    const buckets = [
+      ...top.map((r) => ({
+        label: r.label,
+        count: r.count,
+        percent: computePercent(r.count, total),
+      })),
+      ...(other
+        ? [
+            {
+              label: 'Other',
+              count: other,
+              percent: computePercent(other, total),
+            },
+          ]
+        : []),
+      {
+        label: 'Unknown',
+        count: unknownCount,
+        percent: computePercent(unknownCount, total),
+      },
+    ]
+    return { buckets }
   }
 
   private buildVoterSelect(
