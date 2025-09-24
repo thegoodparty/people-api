@@ -402,40 +402,6 @@ export class PeopleService {
     }
   }
 
-  private async computeAgeBuckets(
-    baseWhere: Prisma.VoterWhereInput,
-    total: number,
-  ) {
-    const ranges = [
-      { label: '18-25', where: { Age_Int: { gte: 18, lte: 25 } } },
-      { label: '25-35', where: { Age_Int: { gt: 25, lte: 35 } } },
-      { label: '35-50', where: { Age_Int: { gt: 35, lte: 50 } } },
-      { label: '50+', where: { Age_Int: { gt: 50 } } },
-    ]
-
-    const tasks = ranges.map((r) =>
-      this.prisma.voter.count({ where: { ...baseWhere, ...(r.where as any) } }),
-    )
-    const unknownTask = this.prisma.voter.count({
-      where: { ...baseWhere, Age_Int: null as unknown as never },
-    })
-    const counts = await Promise.all([...tasks, unknownTask])
-
-    const buckets = [
-      ...ranges.map((r, idx) => ({
-        label: r.label,
-        count: counts[idx],
-        percent: computePercent(counts[idx], total),
-      })),
-      {
-        label: 'Unknown',
-        count: counts[counts.length - 1],
-        percent: computePercent(counts[counts.length - 1], total),
-      },
-    ]
-    return { buckets }
-  }
-
   private async computeNumericBuckets(
     baseWhere: Prisma.VoterWhereInput,
     field: string,
