@@ -13,3 +13,16 @@ GET http://localhost:3002/v1/people/list?state=WY&districtType=Unified_School_Di
 ### Download CSV with veteranStatus IN and presenceOfChildren is null
 GET http://localhost:3002/v1/people/download?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)&filter[veteranStatus][in][]=Yes&filter[veteranStatus][in][]=No&filter[presenceOfChildren][is]=null
 
+### Stats: basic defaults (age, homeowner, income, education, family)
+GET http://localhost:3002/v1/people/stats?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)
+
+### Stats: add facets (gender and partiesDescription) and limit topN
+GET http://localhost:3002/v1/people/stats?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)&categories[]=gender&categories[]=partiesDescription&topN=5
+
+### Stats: custom numeric buckets for age and income (uses Estimated_Income_Amount_Int)
+# Note: numericBuckets uses inclusive ranges [min,max]
+GET http://localhost:3002/v1/people/stats?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)&numericBuckets[ageInt][]=18,25&numericBuckets[ageInt][]=26,35&numericBuckets[ageInt][]=36,49&numericBuckets[ageInt][]=50,200&numericBuckets[estimatedIncomeAmountInt][]=0,40000&numericBuckets[estimatedIncomeAmountInt][]=40001,80000&numericBuckets[estimatedIncomeAmountInt][]=80001,120000&numericBuckets[estimatedIncomeAmountInt][]=120001,1000000000
+
+### Stats: with demographic filter (registeredVoter true, veteranStatus in Yes/No)
+GET http://localhost:3002/v1/people/stats?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)&filter[registeredVoter][eq]=true&filter[veteranStatus][in][]=Yes&filter[veteranStatus][in][]=No
+

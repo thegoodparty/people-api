@@ -293,45 +293,29 @@ export class PeopleService {
         ),
       )
     if (wants('income')) {
-      const incomeRanges =
-        (numericBuckets as Record<string, [number, number][]>)
-          .estimatedIncomeAmountInt ||
-        (numericBuckets as Record<string, [number, number][]>)
-          .Estimated_Income_Amount_Int
-
-      if (incomeRanges && incomeRanges.length) {
-        pushTask('income', () =>
-          this.computeNumericBuckets(
-            where,
-            'Estimated_Income_Amount_Int',
-            totalConstituents,
-            incomeRanges,
-          ),
-        )
-      } else {
-        // Prefer numeric defaults if available; otherwise fallback to string mapping
-        const defaultIncomeRanges = PeopleService.DEFAULT_INCOME_RANGES
-        pushTask('income', async () => {
-          const numeric = await this.computeNumericBuckets(
-            where,
-            'Estimated_Income_Amount_Int',
-            totalConstituents,
-            defaultIncomeRanges,
-          )
-          const sumKnown = (
-            numeric.buckets as Array<{ label: string; count: number }>
-          )
-            .filter((b) => b.label !== 'Unknown')
-            .reduce((acc, b) => acc + b.count, 0)
-          if (sumKnown > 0) return numeric
-          return this.computeMappedStringBuckets(
-            where,
-            'Estimated_Income_Amount',
-            totalConstituents,
-            (v) => normalizeIncomeBucket(v),
-          )
-        })
-      }
+      // TEMP: dev DB lacks Estimated_Income_Amount_Int; use string mapping only
+      pushTask('income', () =>
+        this.computeMappedStringBuckets(
+          where,
+          'Estimated_Income_Amount',
+          totalConstituents,
+          (v) => normalizeIncomeBucket(v),
+        ),
+      )
+      // When the int column is available, restore numeric bucketing logic below:
+      // const incomeRanges = (numericBuckets as Record<string, [number, number][]>).estimatedIncomeAmountInt
+      //   || (numericBuckets as Record<string, [number, number][]>).Estimated_Income_Amount_Int
+      // if (incomeRanges?.length) {
+      //   pushTask('income', () => this.computeNumericBuckets(where, 'Estimated_Income_Amount_Int', totalConstituents, incomeRanges))
+      // } else {
+      //   const defaultIncomeRanges = PeopleService.DEFAULT_INCOME_RANGES
+      //   pushTask('income', async () => {
+      //     const numeric = await this.computeNumericBuckets(where, 'Estimated_Income_Amount_Int', totalConstituents, defaultIncomeRanges)
+      //     const sumKnown = (numeric.buckets as Array<{ label: string; count: number }> ).filter((b) => b.label !== 'Unknown').reduce((acc, b) => acc + b.count, 0)
+      //     if (sumKnown > 0) return numeric
+      //     return this.computeMappedStringBuckets(where, 'Estimated_Income_Amount', totalConstituents, (v) => normalizeIncomeBucket(v))
+      //   })
+      // }
     }
     if (wants('education'))
       pushTask('education', () =>
@@ -511,11 +495,15 @@ export class PeopleService {
 
     // If forcing Yes/No/Unknown, ensure all three keys are present
     const buckets: { label: string; count: number; percent: number }[] = []
+    let mergedUnknown = false
     for (const [label, count] of counts.entries()) {
+      const lbl = String(label)
+      const adjustedCount = lbl === 'Unknown' ? count + unknownCount : count
+      if (lbl === 'Unknown') mergedUnknown = true
       buckets.push({
-        label: String(label),
-        count,
-        percent: computePercent(count, total),
+        label: lbl,
+        count: adjustedCount,
+        percent: computePercent(adjustedCount, total),
       })
     }
 
@@ -551,12 +539,14 @@ export class PeopleService {
       return result
     }
 
-    // Add Unknown bucket
-    buckets.push({
-      label: 'Unknown',
-      count: unknownCount,
-      percent: computePercent(unknownCount, total),
-    })
+    // Add Unknown bucket only if it wasn't already merged
+    if (!mergedUnknown && unknownCount > 0) {
+      buckets.push({
+        label: 'Unknown',
+        count: unknownCount,
+        percent: computePercent(unknownCount, total),
+      })
+    }
 
     const result: any = { buckets }
     if (options?.includeRawDistribution) result.rawModelBreakdown = raw

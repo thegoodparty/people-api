@@ -62,18 +62,23 @@ export const normalizeIncomeBucket = (
 export const normalizeEducationBucket = (
   value: string | null | undefined,
 ):
-  | 'HS or less'
-  | 'Some college/Assoc'
-  | "Bachelor's"
-  | 'Graduate+'
+  | 'None'
+  | 'High School Diploma'
+  | 'Technical School'
+  | 'Some College'
+  | 'College Degree'
+  | 'Graduate Degree'
   | 'Unknown' => {
   const v = (value || '').trim().toLowerCase()
   if (!v) return 'Unknown'
-  if (/less than high|some high|hs|high school/.test(v)) return 'HS or less'
-  if (/some college|associate|assoc|aa|as/.test(v)) return 'Some college/Assoc'
-  if (/college grad|bachelor|ba|bs|b\.s\.|b\.a\./.test(v)) return "Bachelor's"
-  if (/graduate|post grad|masters|ms|ma|mba|phd|doctorate|jd|md/.test(v))
-    return 'Graduate+'
+  if (v.includes('did not complete high school')) return 'None'
+  if (v.includes('completed high school')) return 'High School Diploma'
+  if (v.includes('attended vocational') || v.includes('technical school'))
+    return 'Technical School'
+  if (v.includes('attended but did not complete college')) return 'Some College'
+  if (v.includes('completed college')) return 'College Degree'
+  if (v.includes('completed grad school')) return 'Graduate Degree'
+  if (v === 'unknown') return 'Unknown'
   return 'Unknown'
 }
 
