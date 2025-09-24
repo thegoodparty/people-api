@@ -29,6 +29,15 @@ import {
   normalizeHomeowner,
   normalizeIncomeBucket,
 } from 'src/shared/util/stats'
+import type {
+  BucketsResult,
+  BucketsWithRaw,
+  NumericRange,
+  NumericBucketsByField,
+  PrismaVoterScalarIntKeys,
+  PrismaVoterScalarStringKeys,
+  StatsCategoryMap,
+} from './people.types'
 
 @Injectable()
 export class PeopleService {
@@ -197,12 +206,12 @@ export class PeopleService {
 
         if (!page.length) break
 
-        type PrismaRow = Record<string, string | number | null | undefined>
-        for (const person of page as unknown as PrismaRow[]) {
+        type CsvValue = string | number | null | undefined
+        for (const person of page) {
           if (aborted) break
           const row: ExportRow = {}
           for (const key of selectedColumns) {
-            row[key] = person[key]
+            row[key] = person[key as keyof typeof person] as CsvValue
           }
           row.electionLocation = districtType ?? ''
           row.electionType = districtName ?? ''
@@ -215,8 +224,7 @@ export class PeopleService {
           }
         }
 
-        cursor = (page[page.length - 1] as unknown as { LALVOTERID: string })
-          .LALVOTERID
+        cursor = (page[page.length - 1] as { LALVOTERID: string }).LALVOTERID
 
         if (page.length < pageSize) break
       }
@@ -226,7 +234,16 @@ export class PeopleService {
     }
   }
 
-  async getStats(dto: StatsDTO) {
+  async getStats(dto: StatsDTO): Promise<{
+    meta: {
+      state: string
+      districtType?: string
+      districtName?: string
+      electionYear: number
+      totalConstituents: number
+    }
+    categories: StatsCategoryMap
+  }> {
     const {
       state,
       districtType,
@@ -258,20 +275,26 @@ export class PeopleService {
 
     const categorySet = new Set<string>(categories)
 
-    const tasks: Array<Promise<[string, unknown]>> = []
+    const tasks: Array<Promise<[string, BucketsResult | BucketsWithRaw]>> = []
 
-    const pushTask = (name: string, fn: () => Promise<unknown>) => {
+    const pushTask = (
+      name: string,
+      fn: () => Promise<BucketsResult | BucketsWithRaw>,
+    ) => {
       tasks.push(
-        fn().then((result) => [name, result]) as Promise<[string, unknown]>,
+        fn().then((result) => [name, result]) as Promise<
+          [string, BucketsResult | BucketsWithRaw]
+        >,
       )
     }
 
     const wants = (name: string) => categorySet.has(name)
 
     if (wants('age')) {
+      const numericMap = numericBuckets as NumericBucketsByField
       const ageRanges =
-        (numericBuckets as Record<string, [number, number][]>).ageInt ||
-        (numericBuckets as Record<string, [number, number][]>).Age_Int ||
+        numericMap.ageInt ||
+        numericMap.Age_Int ||
         PeopleService.DEFAULT_AGE_RANGES
       pushTask('age', () =>
         this.computeNumericBuckets(
@@ -349,20 +372,16 @@ export class PeopleService {
     // Support all DEMOGRAPHIC_FILTER_FIELDS as requestable facets
     for (const [apiField, meta] of Object.entries(DEMOGRAPHIC_FILTER_FIELDS)) {
       if (!wants(apiField)) continue
-      const prismaField = meta.prismaField as keyof Prisma.VoterWhereInput
+      const prismaField = meta.prismaField as PrismaVoterScalarStringKeys
       if (meta.type === 'boolean') {
         pushTask(apiField, () =>
-          this.computeBooleanBuckets(
-            where,
-            prismaField as string,
-            totalConstituents,
-          ),
+          this.computeBooleanBuckets(where, prismaField, totalConstituents),
         )
       } else {
         pushTask(apiField, () =>
           this.computeStringFieldTopN(
             where,
-            prismaField as string,
+            prismaField,
             totalConstituents,
             topN,
           ),
@@ -371,7 +390,7 @@ export class PeopleService {
     }
 
     const results = await Promise.all(tasks)
-    const categoriesOut: Record<string, unknown> = {}
+    const categoriesOut: StatsCategoryMap = {}
     for (const [name, value] of results) categoriesOut[name] = value
 
     return {
@@ -388,20 +407,23 @@ export class PeopleService {
 
   private async computeNumericBuckets(
     baseWhere: Prisma.VoterWhereInput,
-    field: string,
+    field: PrismaVoterScalarIntKeys,
     total: number,
-    ranges: [number, number][],
-  ) {
+    ranges: NumericRange[],
+  ): Promise<BucketsResult> {
     const tasks = ranges.map(([min, max]) =>
       this.prisma.voter.count({
         where: {
           ...baseWhere,
-          [field]: { gte: min, lte: max } as any,
-        } as any,
+          [field]: { gte: min, lte: max },
+        } as Prisma.VoterWhereInput,
       }),
     )
     const unknownTask = this.prisma.voter.count({
-      where: { ...baseWhere, [field]: null } as any,
+      where: {
+        ...baseWhere,
+        [field]: null as never,
+      } as Prisma.VoterWhereInput,
     })
     const counts = await Promise.all([...tasks, unknownTask])
 
@@ -422,18 +444,21 @@ export class PeopleService {
 
   private async computeBooleanBuckets(
     baseWhere: Prisma.VoterWhereInput,
-    field: string,
+    field: Extract<keyof Prisma.VoterWhereInput, string>,
     total: number,
-  ) {
+  ): Promise<BucketsResult> {
     const [trueCount, falseCount, nullCount] = await Promise.all([
       this.prisma.voter.count({
-        where: { ...baseWhere, [field]: true } as any,
+        where: { ...baseWhere, [field]: true } as Prisma.VoterWhereInput,
       }),
       this.prisma.voter.count({
-        where: { ...baseWhere, [field]: false } as any,
+        where: { ...baseWhere, [field]: false } as Prisma.VoterWhereInput,
       }),
       this.prisma.voter.count({
-        where: { ...baseWhere, [field]: null } as any,
+        where: {
+          ...baseWhere,
+          [field]: null as never,
+        } as Prisma.VoterWhereInput,
       }),
     ])
     const buckets = [
@@ -456,25 +481,31 @@ export class PeopleService {
     return { buckets }
   }
 
-  private async computeMappedStringBuckets<Label extends string>(
+  private async computeMappedStringBuckets(
     baseWhere: Prisma.VoterWhereInput,
-    field: string,
+    field: PrismaVoterScalarStringKeys,
     total: number,
-    mapToBucket: (value: string | null | undefined) => Label,
+    mapToBucket: (value: string | null | undefined) => string,
     options?: { includeRawDistribution?: boolean; forceYesNoUnknown?: boolean },
-  ) {
+  ): Promise<BucketsResult | BucketsWithRaw> {
     const rows = await this.prisma.voter.groupBy({
-      by: [field as any],
-      where: { ...baseWhere, NOT: { [field]: null } as any },
+      by: [field as Prisma.VoterScalarFieldEnum],
+      where: (() => {
+        const notNull: Prisma.VoterWhereInput = {
+          [field]: null as never,
+        } as Prisma.VoterWhereInput
+        return { ...baseWhere, NOT: notNull }
+      })(),
       _count: { _all: true },
     })
 
-    const counts = new Map<Label, number>()
+    type GroupRow<K extends string> = Record<K, string | null> & {
+      _count: { _all: number }
+    }
+    const counts = new Map<string, number>()
     const raw: { label: string; count: number }[] = []
-    for (const r of rows as Array<
-      Record<string, unknown> & { _count: { _all: number } }
-    >) {
-      const rawValue = (r as any)[field] as string | null | undefined
+    for (const r of rows as Array<GroupRow<typeof field>>) {
+      const rawValue = r[field]
       const label = mapToBucket(rawValue)
       counts.set(label, (counts.get(label) || 0) + r._count._all)
       if (options?.includeRawDistribution) {
@@ -485,55 +516,41 @@ export class PeopleService {
     // Unknown: null or empty string
     const [nullCount, emptyCount] = await Promise.all([
       this.prisma.voter.count({
-        where: { ...baseWhere, [field]: null } as any,
+        where: {
+          ...baseWhere,
+          [field]: null as never,
+        } as Prisma.VoterWhereInput,
       }),
       this.prisma.voter.count({
-        where: { ...baseWhere, [field]: '' } as any,
+        where: { ...baseWhere, [field]: '' } as Prisma.VoterWhereInput,
       }),
     ])
     const unknownCount = nullCount + emptyCount
 
-    // If forcing Yes/No/Unknown, ensure all three keys are present
     const buckets: { label: string; count: number; percent: number }[] = []
     let mergedUnknown = false
     for (const [label, count] of counts.entries()) {
-      const lbl = String(label)
-      const adjustedCount = lbl === 'Unknown' ? count + unknownCount : count
-      if (lbl === 'Unknown') mergedUnknown = true
+      const adjustedCount = label === 'Unknown' ? count + unknownCount : count
+      if (label === 'Unknown') mergedUnknown = true
       buckets.push({
-        label: lbl,
+        label,
         count: adjustedCount,
         percent: computePercent(adjustedCount, total),
       })
     }
 
     if (options?.forceYesNoUnknown) {
-      const ensure = (label: Label) => {
-        if (!counts.has(label)) counts.set(label, 0)
-      }
-      // @ts-expect-error ensure typed labels exist when we know the domain
-      ensure('Yes')
-      // @ts-expect-error ensure typed labels exist when we know the domain
-      ensure('No')
-      // @ts-expect-error ensure typed labels exist when we know the domain
-      ensure('Unknown')
-      // Rebuild buckets in preferred order Yes/No/Unknown
-      const ordered: Array<Label> = [
-        'Yes',
-        'No',
-        'Unknown',
-      ] as unknown as Array<Label>
-      const remapped = ordered.map((lab) => {
-        const c =
-          lab === ('Unknown' as unknown as Label)
-            ? unknownCount
-            : counts.get(lab) || 0
-        return {
-          label: String(lab),
-          count: c,
-          percent: computePercent(c, total),
-        }
-      })
+      const yes = counts.get('Yes') || 0
+      const no = counts.get('No') || 0
+      const remapped = [
+        { label: 'Yes', count: yes, percent: computePercent(yes, total) },
+        { label: 'No', count: no, percent: computePercent(no, total) },
+        {
+          label: 'Unknown',
+          count: unknownCount,
+          percent: computePercent(unknownCount, total),
+        },
+      ]
       const result: any = { buckets: remapped }
       if (options?.includeRawDistribution) result.rawModelBreakdown = raw
       return result
@@ -555,18 +572,26 @@ export class PeopleService {
 
   private async computeStringFieldTopN(
     baseWhere: Prisma.VoterWhereInput,
-    field: string,
+    field: PrismaVoterScalarStringKeys,
     total: number,
     topN: number,
-  ) {
+  ): Promise<BucketsResult> {
     const rows = await this.prisma.voter.groupBy({
-      by: [field as any],
-      where: { ...baseWhere, NOT: { [field]: null } as any },
+      by: [field as Prisma.VoterScalarFieldEnum],
+      where: (() => {
+        const notNull: Prisma.VoterWhereInput = {
+          [field]: null as never,
+        } as Prisma.VoterWhereInput
+        return { ...baseWhere, NOT: notNull }
+      })(),
       _count: { _all: true },
     })
 
-    const items = rows
-      .map((r: any) => ({
+    type GroupRow<K extends string> = Record<K, string | null> & {
+      _count: { _all: number }
+    }
+    const items = (rows as Array<GroupRow<typeof field>>)
+      .map((r) => ({
         label: String(r[field] ?? ''),
         count: r._count._all,
       }))
@@ -574,10 +599,13 @@ export class PeopleService {
 
     const [nullCount, emptyCount] = await Promise.all([
       this.prisma.voter.count({
-        where: { ...baseWhere, [field]: null } as any,
+        where: {
+          ...baseWhere,
+          [field]: null as never,
+        } as Prisma.VoterWhereInput,
       }),
       this.prisma.voter.count({
-        where: { ...baseWhere, [field]: '' } as any,
+        where: { ...baseWhere, [field]: '' } as Prisma.VoterWhereInput,
       }),
     ])
     const unknownCount = nullCount + emptyCount
@@ -838,22 +866,22 @@ export class PeopleService {
     if (filters.includes('audienceSuperVoters')) {
       turnoutOr.push({
         [performanceField]: { in: ['High'] },
-      } as unknown as Prisma.VoterWhereInput)
+      } as Prisma.VoterWhereInput)
     }
     if (filters.includes('audienceLikelyVoters')) {
       turnoutOr.push({
         [performanceField]: { in: ['Above Average', 'Average'] },
-      } as unknown as Prisma.VoterWhereInput)
+      } as Prisma.VoterWhereInput)
     }
     if (filters.includes('audienceUnreliableVoters')) {
       turnoutOr.push({
         [performanceField]: { in: ['Below Average'] },
-      } as unknown as Prisma.VoterWhereInput)
+      } as Prisma.VoterWhereInput)
     }
     if (filters.includes('audienceUnlikelyVoters')) {
       turnoutOr.push({
         [performanceField]: { in: ['Low'] },
-      } as unknown as Prisma.VoterWhereInput)
+      } as Prisma.VoterWhereInput)
     }
     if (filters.includes('audienceFirstTimeVoters')) {
       // Match gp-api: treat no voting performance as first-time
@@ -861,8 +889,8 @@ export class PeopleService {
         OR: [
           {
             [performanceField]: { in: ['0%', 'Not Eligible', ''] },
-          } as unknown as Prisma.VoterWhereInput,
-          { [performanceField]: null } as unknown as Prisma.VoterWhereInput,
+          } as Prisma.VoterWhereInput,
+          { [performanceField]: null as never } as Prisma.VoterWhereInput,
         ],
       })
     }
