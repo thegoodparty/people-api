@@ -1,6 +1,7 @@
 import { createZodDto } from 'nestjs-zod'
 import { STATE_CODES } from 'src/shared/constants/states'
 import { z } from 'zod'
+import { DEMOGRAPHIC_FILTER_FIELDS } from './people.filters'
 
 const allowedFilters = [
   'audienceSuperVoters',
@@ -149,6 +150,20 @@ const allowedCategoryDefaults = [
   'familyMarital',
 ] as const
 
+// Defaults: include all built-in categories plus all demographic filter fields
+const allowedCategoryAllDefault: string[] = [
+  ...allowedCategoryDefaults,
+  ...Object.keys(DEMOGRAPHIC_FILTER_FIELDS).filter(
+    (k) =>
+      ![
+        'voterTelephonesCellPhoneFormatted',
+        'voterTelephonesLandlineFormatted',
+        'votingPerformanceEvenYearGeneral',
+        'votingPerformanceMinorElection',
+      ].includes(k),
+  ),
+]
+
 // Permit any DEMOGRAPHIC_FILTER_FIELDS key name too (validated at runtime in service)
 export const statsSchema = z.object({
   state: stateSchema,
@@ -162,7 +177,7 @@ export const statsSchema = z.object({
   categories: z
     .preprocess((v) => coerceArray(v), z.array(z.string()))
     .optional()
-    .default(allowedCategoryDefaults as unknown as string[]),
+    .default(allowedCategoryAllDefault),
   // Numeric bucket definitions: map of fieldName -> array of [min,max] inclusive ranges
   // Example: { ageInt: [[18,25],[26,35],[36,50],[51,200]] }
   numericBuckets: z

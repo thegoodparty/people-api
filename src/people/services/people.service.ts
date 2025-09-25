@@ -1,6 +1,6 @@
-import { PrismaService } from 'src/prisma/prisma.service'
 import { Prisma } from '@prisma/client'
 import { DownloadPeopleDTO, ListPeopleDTO } from '../people.schema'
+import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
 import {
   DEMOGRAPHIC_FILTER_FIELDS,
   DemographicFilter,
@@ -23,9 +23,7 @@ import { format } from '@fast-csv/format'
 import type { RowMap } from '@fast-csv/format'
 
 @Injectable()
-export class PeopleService {
-  constructor(private readonly prisma: PrismaService) {}
-
+export class PeopleService extends createPrismaBase(MODELS.Voter) {
   private static readonly MAX_FIELDS = 15
   private static readonly API_FIELD_MAX_CHARS = 100
   private static readonly API_FIELD_MAX_VALUES = 50
@@ -61,7 +59,7 @@ export class PeopleService {
       full = true,
       filter = {},
     } = dto
-    const model = this.prisma.voter
+    const model = this.model
 
     // Validate districtType against Prisma enum if provided
     this.validateDistrictType(districtType)
@@ -149,7 +147,7 @@ export class PeopleService {
     const csvStream = format<ExportRow, ExportRow>({ headers })
     csvStream.pipe(res.raw)
 
-    const model = this.prisma.voter
+    const model = this.model
     const pageSize = 5000
     let cursor: string | undefined
     let aborted = false
@@ -323,13 +321,6 @@ export class PeopleService {
     if (filters.includes('genderUnknown')) genderValues.push('')
     if (genderValues.length) where.Gender = { in: genderValues }
 
-    // const partyValues: string[] = []
-    // if (filters.includes('partyDemocrat')) partyValues.push('Democratic')
-    // if (filters.includes('partyRepublican')) partyValues.push('Republican')
-    // if (filters.includes('partyIndependent'))
-    //   partyValues.push('Non-Partisan', 'Other')
-    // if (partyValues.length) where.Parties_Description = { in: partyValues }
-    // parties
     const wantsDemocratic = filters.includes('partyDemocrat')
     const wantsRepublican = filters.includes('partyRepublican')
     const wantsIndependentOrOther = filters.includes('partyIndependent')
