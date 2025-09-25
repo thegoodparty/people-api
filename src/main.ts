@@ -13,6 +13,7 @@ import { Logger } from '@nestjs/common'
 import fastifyStatic from '@fastify/static'
 import { join } from 'path'
 import { ZodValidationPipe } from 'nestjs-zod'
+import qs from 'qs'
 
 const APP_LISTEN_CONFIG = {
   port: Number(process.env.PORT) || 3000,
@@ -23,6 +24,17 @@ const bootstrap = async () => {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({
+      // Ensure bracketed query params like filters[] and filter[field][op] parse correctly
+      querystringParser: (str) =>
+        qs.parse(str, {
+          allowDots: false,
+          comma: false,
+          depth: 10,
+          arrayLimit: 1000,
+          parseArrays: true,
+          allowPrototypes: false,
+          ignoreQueryPrefix: true,
+        }) as Record<string, unknown>,
       ...(process.env.LOG_LEVEL
         ? {
             logger: { level: process.env.LOG_LEVEL },
