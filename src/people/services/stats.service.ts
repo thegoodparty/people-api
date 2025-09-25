@@ -13,6 +13,7 @@ import {
   normalizeChildrenPresence,
   normalizeEducationBucket,
   normalizeHomeowner,
+  normalizeIncomeBucket,
 } from 'src/shared/util/stats'
 import type {
   AllowedFilter,
@@ -148,47 +149,47 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
           { includeRawDistribution: true },
         ),
       )
-    // if (wants('income')) {
-    //   const incomeRanges =
-    //     (numericBuckets as Record<string, [number, number][]>)[
-    //       'estimatedIncomeAmountInt'
-    //     ] ||
-    //     (numericBuckets as Record<string, [number, number][]>)[
-    //       'Estimated_Income_Amount_Int'
-    //     ]
-    //   if (incomeRanges?.length) {
-    //     pushTask('income', () =>
-    //       this.computeNumericBuckets(
-    //         where,
-    //         'Estimated_Income_Amount_Int',
-    //         totalConstituents,
-    //         incomeRanges,
-    //       ),
-    //     )
-    //   } else {
-    //     const defaultIncomeRanges = StatsService.DEFAULT_INCOME_RANGES
-    //     pushTask('income', async () => {
-    //       const numeric = await this.computeNumericBuckets(
-    //         where,
-    //         'Estimated_Income_Amount_Int',
-    //         totalConstituents,
-    //         defaultIncomeRanges,
-    //       )
-    //       const sumKnown = (
-    //         numeric.buckets as Array<{ label: string; count: number }>
-    //       )
-    //         .filter((b) => b.label !== 'Unknown')
-    //         .reduce((acc, b) => acc + b.count, 0)
-    //       if (sumKnown > 0) return numeric
-    //       return this.computeMappedStringBuckets(
-    //         where,
-    //         'Estimated_Income_Amount',
-    //         totalConstituents,
-    //         (v) => normalizeIncomeBucket(v),
-    //       )
-    //     })
-    //   }
-    // }
+    if (wants('income')) {
+      const incomeRanges =
+        (numericBuckets as Record<string, [number, number][]>)[
+          'estimatedIncomeAmountInt'
+        ] ||
+        (numericBuckets as Record<string, [number, number][]>)[
+          'Estimated_Income_Amount_Int'
+        ]
+      if (incomeRanges?.length) {
+        pushTask('income', () =>
+          this.computeNumericBuckets(
+            where,
+            'Estimated_Income_Amount_Int',
+            totalConstituents,
+            incomeRanges,
+          ),
+        )
+      } else {
+        const defaultIncomeRanges = StatsService.DEFAULT_INCOME_RANGES
+        pushTask('income', async () => {
+          const numeric = await this.computeNumericBuckets(
+            where,
+            'Estimated_Income_Amount_Int',
+            totalConstituents,
+            defaultIncomeRanges,
+          )
+          const sumKnown = (
+            numeric.buckets as Array<{ label: string; count: number }>
+          )
+            .filter((b) => b.label !== 'Unknown')
+            .reduce((acc, b) => acc + b.count, 0)
+          if (sumKnown > 0) return numeric
+          return this.computeMappedStringBuckets(
+            where,
+            'Estimated_Income_Amount',
+            totalConstituents,
+            (v) => normalizeIncomeBucket(v),
+          )
+        })
+      }
+    }
     if (wants('education'))
       pushTask('education', () =>
         this.computeMappedStringBuckets(
