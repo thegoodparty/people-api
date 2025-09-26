@@ -531,17 +531,45 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
 
     // genders
     const genderValues: string[] = []
+    const includeNullGender = filters.includes('genderUnknown')
     if (filters.includes('genderMale')) genderValues.push('M')
     if (filters.includes('genderFemale')) genderValues.push('F')
     if (filters.includes('genderUnknown')) genderValues.push('')
-    if (genderValues.length) where.Gender = { in: genderValues }
+
+    if (genderValues.length || includeNullGender) {
+      const genderConditions: Prisma.VoterWhereInput[] = []
+      if (genderValues.length) {
+        genderConditions.push({ Gender: { in: genderValues } })
+      }
+      if (includeNullGender) {
+        genderConditions.push({ Gender: null })
+      }
+      if (genderConditions.length === 1) {
+        Object.assign(where, genderConditions[0])
+      } else {
+        const andClauses: Prisma.VoterWhereInput[] = []
+        if (where.AND) {
+          andClauses.push(
+            ...(Array.isArray(where.AND) ? where.AND : [where.AND]),
+          )
+        }
+        andClauses.push({ OR: genderConditions })
+        where.AND = andClauses
+      }
+    }
 
     // parties (see PeopleService for detailed explanation)
     const wantsDemocratic = filters.includes('partyDemocrat')
     const wantsRepublican = filters.includes('partyRepublican')
     const wantsIndependentOrOther = filters.includes('partyIndependent')
+    const wantsUnknown = filters.includes('partyUnknown')
 
-    if (wantsDemocratic || wantsRepublican || wantsIndependentOrOther) {
+    if (
+      wantsDemocratic ||
+      wantsRepublican ||
+      wantsIndependentOrOther ||
+      wantsUnknown
+    ) {
       const partyOrClauses: Prisma.VoterWhereInput[] = []
       if (wantsDemocratic) {
         partyOrClauses.push({
@@ -577,8 +605,16 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
           ],
         })
       }
+      if (wantsUnknown) {
+        partyOrClauses.push({
+          OR: [{ Parties_Description: null }, { Parties_Description: '' }],
+        })
+      }
       const selectsAll =
-        wantsDemocratic && wantsRepublican && wantsIndependentOrOther
+        wantsDemocratic &&
+        wantsRepublican &&
+        wantsIndependentOrOther &&
+        wantsUnknown
       if (!selectsAll && partyOrClauses.length) {
         const andClauses: Prisma.VoterWhereInput[] = []
         if (where.AND) {
@@ -593,7 +629,9 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
 
     // age buckets on indexed integer column
     const usesAge = filters.some((f) =>
-      ['age18_25', 'age25_35', 'age35_50', 'age50Plus'].includes(f),
+      ['age18_25', 'age25_35', 'age35_50', 'age50Plus', 'ageUnknown'].includes(
+        f,
+      ),
     )
     if (usesAge) {
       type AgeClause = Prisma.VoterWhereInput & {
@@ -607,6 +645,7 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
       if (filters.includes('age35_50'))
         ageOr.push({ Age_Int: { gt: 35, lte: 50 } })
       if (filters.includes('age50Plus')) ageOr.push({ Age_Int: { gt: 50 } })
+      if (filters.includes('ageUnknown')) ageOr.push({ Age_Int: null as never })
       if (ageOr.length) {
         const andClauses: Prisma.VoterWhereInput[] = []
         if (where.AND) {
@@ -660,8 +699,20 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
         ],
       })
     }
+    if (filters.includes('audienceUnknown')) {
+      // Unknown audience means null voting performance
+      turnoutOr.push({
+        [performanceField]: null as never,
+      } as Prisma.VoterWhereInput)
+    }
     if (filters.includes('audienceRequest')) {
       // no-op by design
+    }
+    if (filters.includes('registeredVoterUnknown')) {
+      // This is handled through demographic filters in contacts service
+    }
+    if (filters.includes('incomeUnknown')) {
+      // This is handled through demographic filters in contacts service
     }
     if (turnoutOr.length) {
       const andClauses: Prisma.VoterWhereInput[] = []
