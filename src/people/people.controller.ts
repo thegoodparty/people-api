@@ -11,11 +11,6 @@ export class PeopleController {
     private readonly statsService: StatsService,
   ) {}
 
-  @Get(':id')
-  getPerson(@Param('id') id: string) {
-    return this.peopleService.findUnique({ where: { id } })
-  }
-
   @Get()
   listPeople(@Query() filterDto: ListPeopleDTO) {
     return this.peopleService.findPeople(filterDto)
@@ -34,5 +29,10 @@ export class PeopleController {
   @Get('stats')
   getStats(@Query() dto: StatsDTO) {
     return this.statsService.getStats(dto)
+  }
+
+  @Get(':id')
+  getPerson(@Param('id') id: string) {
+    return this.peopleService.findUnique({ where: { id } })
   }
 }
