@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Res } from '@nestjs/common'
+import { Controller, Get, Param, Query, Res } from '@nestjs/common'
 import { DownloadPeopleDTO, ListPeopleDTO, StatsDTO } from './people.schema'
 import { PeopleService } from './services/people.service'
 import { StatsService } from './services/stats.service'
@@ -11,7 +11,12 @@ export class PeopleController {
     private readonly statsService: StatsService,
   ) {}
 
-  @Get('list')
+  @Get(':id')
+  getPerson(@Param('id') id: string) {
+    return this.peopleService.findUnique({ where: { id } })
+  }
+
+  @Get()
   listPeople(@Query() filterDto: ListPeopleDTO) {
     return this.peopleService.findPeople(filterDto)
   }
