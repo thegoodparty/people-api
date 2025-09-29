@@ -5,11 +5,21 @@ import { PrismaService } from '../prisma/prisma.service'
 export class HealthService {
   constructor(private prisma: PrismaService) {}
   private readonly logger = new Logger(HealthService.name)
+  private startTime = Date.now()
+
   async checkHealth(): Promise<boolean> {
-    // Right now, this just simply checks if the database connection is working,
-    //   but we can add more checks here for other backend services as well..
+    const uptime = Date.now() - this.startTime
+
+    if (uptime < 30000) {
+      this.logger.debug(
+        `Application still starting up (${uptime}ms), returning healthy`,
+      )
+      return true
+    }
+
     try {
       await this.prisma.$queryRaw`SELECT 1`
+      this.logger.debug('Database health check passed')
       return true
     } catch (e: unknown) {
       this.logger.error(

@@ -22,5 +22,8 @@ phases:
     commands:
       - echo "Deploying people-api SST app to stage $STAGE"
       - sst deploy --stage=$STAGE --verbose --print-logs
-      - aws ecs wait services-stable --cluster $CLUSTER_NAME --services $SERVICE_NAME
+      - echo "Checking service status before waiting..."
+      - aws ecs describe-services --cluster $CLUSTER_NAME --services $SERVICE_NAME
+      - echo "Waiting for service to become stable (this may take up to 10 minutes)..."
+      - timeout 900 aws ecs wait services-stable --cluster $CLUSTER_NAME --services $SERVICE_NAME || (echo "Service stability check timed out or failed. Checking service status..." && aws ecs describe-services --cluster $CLUSTER_NAME --services $SERVICE_NAME && exit 1)
       - echo "Done!"
