@@ -37,6 +37,17 @@ export const normalizeChildrenPresence = (
   return 'Unknown'
 }
 
+export const normalizeBusinessOwner = (
+  value: string | null | undefined,
+): 'Yes' | 'No' | 'Unknown' => {
+  const v = (value || '').trim().toLowerCase()
+  if (!v) return 'Unknown'
+  // If the data vendor ever provides explicit negatives, treat them as No
+  if (v === 'n' || v === 'no' || v === 'false') return 'No'
+  // Any other non-empty value indicates some form of ownership/employment
+  return 'Yes'
+}
+
 export const normalizeIncomeBucket = (
   value: string | null | undefined,
 ):
