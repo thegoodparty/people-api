@@ -12,6 +12,7 @@ import {
   mergeTopNWithOther,
   normalizeChildrenPresence,
   normalizeEducationBucket,
+  normalizeBusinessOwner,
   normalizeHomeowner,
   normalizeIncomeBucket,
 } from 'src/shared/util/stats'
@@ -216,6 +217,16 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
           'Marital_Status',
           totalConstituents,
           topN,
+        ),
+      )
+    if (wants('businessOwner'))
+      pushTask('businessOwner', () =>
+        this.computeMappedStringBuckets(
+          where,
+          'Business_Owner',
+          totalConstituents,
+          (v) => normalizeBusinessOwner(v),
+          { forceYesNoUnknown: true, includeRawDistribution: true },
         ),
       )
 
