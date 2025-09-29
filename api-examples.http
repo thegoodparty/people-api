@@ -26,3 +26,6 @@ GET http://localhost:3002/v1/people/stats?state=WY&districtType=Unified_School_D
 ### Stats: with demographic filter (registeredVoter true, veteranStatus in Yes/No)
 GET http://localhost:3002/v1/people/stats?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)&filter[registeredVoter][eq]=true&filter[veteranStatus][in][]=Yes&filter[veteranStatus][in][]=No
 
+### Get a specific person by ID
+GET http://localhost:3002/v1/people/12345678-1234-1234-1234-123456789abc
+

@@ -1,4 +1,12 @@
-import { Controller, Get, Param, Query, Res } from '@nestjs/common'
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  Query,
+  Res,
+} from '@nestjs/common'
 import { DownloadPeopleDTO, ListPeopleDTO, StatsDTO } from './people.schema'
 import { PeopleService } from './services/people.service'
 import { StatsService } from './services/stats.service'
@@ -32,7 +40,16 @@ export class PeopleController {
   }
 
   @Get(':id')
-  getPerson(@Param('id') id: string) {
-    return this.peopleService.findUnique({ where: { id } })
+  async getPerson(@Param('id') id: string) {
+    if (!id || id.trim() === '') {
+      throw new BadRequestException('ID parameter is required')
+    }
+
+    const person = await this.peopleService.findUnique({ where: { id } })
+    if (!person) {
+      throw new NotFoundException(`Person with ID ${id} not found`)
+    }
+
+    return person
   }
 }
