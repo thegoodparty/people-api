@@ -197,6 +197,10 @@ export default $config({
           '80/http': {
             path: '/v1/health',
             interval: '30 seconds',
+            timeout: '10 seconds',
+            healthyThreshold: 2,
+            unhealthyThreshold: 5,
+            gracePeriod: '300 seconds',
           },
         },
       },
