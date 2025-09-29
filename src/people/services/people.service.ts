@@ -210,6 +210,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     const isEvenYear = electionYear % 2 === 0
     if (full) {
       const select: Prisma.VoterSelect = {
+        id: true,
         LALVOTERID: true,
         State: true,
         FirstName: true,
