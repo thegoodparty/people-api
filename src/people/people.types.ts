@@ -53,6 +53,7 @@ export type PerformanceFieldKey = Extract<
 export type PrismaVoterScalarStringKeys = Extract<
   keyof Prisma.VoterWhereInput,
   | 'Homeowner_Probability_Model'
+  | 'Business_Owner'
   | 'Estimated_Income_Amount'
   | 'Education_Of_Person'
   | 'Presence_Of_Children'
@@ -94,6 +95,7 @@ export type StringMapper<Label extends string> = (
 export interface StatsCategoryMap {
   age?: BucketsResult
   homeowner?: BucketsWithRaw
+  businessOwner?: BucketsWithRaw
   income?: BucketsResult
   education?: BucketsResult
   familyChildren?: BucketsResult
