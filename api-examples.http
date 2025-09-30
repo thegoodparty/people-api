@@ -1,14 +1,14 @@
 ### List people from a district
-GET http://localhost:3002/v1/people?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)
+GET http://localhost:3002/v1/people/list?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)
 
 ### List people with language and voter status filters
-GET http://localhost:3002/v1/people?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)&resultsPerPage=50&page=1&filter[languageCode][in][]=EN&filter[languageCode][in][]=ES&filter[voterStatus][eq]=Active
+GET http://localhost:3002/v1/people/list?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)&resultsPerPage=50&page=1&filter[languageCode][in][]=EN&filter[languageCode][in][]=ES&filter[voterStatus][eq]=Active
 
 ### List people where educationOfPerson is non-null
-GET http://localhost:3002/v1/people?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)&filter[educationOfPerson][is]=not_null
+GET http://localhost:3002/v1/people/list?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)&filter[educationOfPerson][is]=not_null
 
 ### List people with registeredVoter true or false (boolean IN)
-GET http://localhost:3002/v1/people?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)&filter[registeredVoter][in][]=true&filter[registeredVoter][in][]=false
+GET http://localhost:3002/v1/people/list?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)&filter[registeredVoter][in][]=true&filter[registeredVoter][in][]=false
 
 ### Download CSV with veteranStatus IN and presenceOfChildren is null
 GET http://localhost:3002/v1/people/download?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)&filter[veteranStatus][in][]=Yes&filter[veteranStatus][in][]=No&filter[presenceOfChildren][is]=null
@@ -26,6 +26,12 @@ GET http://localhost:3002/v1/people/stats?state=WY&districtType=Unified_School_D
 ### Stats: with demographic filter (registeredVoter true, veteranStatus in Yes/No)
 GET http://localhost:3002/v1/people/stats?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)&filter[registeredVoter][eq]=true&filter[veteranStatus][in][]=Yes&filter[veteranStatus][in][]=No
 
-### Get a specific person by ID
-GET http://localhost:3002/v1/people/12345678-1234-1234-1234-123456789abc
+### Search voters by phone
+GET http://localhost:3002/v1/people/search?phone=213-555-0182&state=CA
+
+### Search voters by name
+GET http://localhost:3002/v1/people/search?name=Ada%20Lovelace&state=CA
+
+### Search voters by first and last name with district
+GET http://localhost:3002/v1/people/search?firstName=Ada&lastName=Lovelace&state=CA&districtType=US_Congressional_District&districtName=CA-12&page=1&resultsPerPage=25
 

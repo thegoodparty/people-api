@@ -150,6 +150,37 @@ export const downloadPeopleSchema = z.object({
 
 export class DownloadPeopleDTO extends createZodDto(downloadPeopleSchema) {}
 
+export const searchPeopleSchema = z
+  .object({
+    state: stateSchema.optional(),
+    districtType: z.string().optional(),
+    districtName: z.string().optional(),
+    phone: z.string().optional(),
+    name: z.string().optional(),
+    firstName: z.string().optional(),
+    lastName: z.string().optional(),
+    resultsPerPage: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .default(25),
+    page: z.coerce.number().int().min(1).optional().default(1),
+  })
+  .refine(
+    (v) => !!(v.phone || v.name || v.firstName || v.lastName),
+    'Provide phone or name to search',
+  )
+  .refine(
+    (v) =>
+      (v.districtType && v.districtName) ||
+      (!v.districtType && !v.districtName),
+    'districtType and districtName must be provided together',
+  )
+
+export class SearchPeopleDTO extends createZodDto(searchPeopleSchema) {}
+
 // ---- Stats DTO ----
 const allowedCategoryDefaults = [
   'age',

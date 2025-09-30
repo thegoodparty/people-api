@@ -1,5 +1,9 @@
 import { Prisma } from '@prisma/client'
-import { DownloadPeopleDTO, ListPeopleDTO } from '../people.schema'
+import {
+  DownloadPeopleDTO,
+  ListPeopleDTO,
+  SearchPeopleDTO,
+} from '../people.schema'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
 import {
   DEMOGRAPHIC_FILTER_FIELDS,
@@ -45,6 +49,126 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     return isEvenYear
       ? 'VotingPerformanceEvenYearGeneral'
       : 'VotingPerformanceMinorElection'
+  }
+
+  private normalizePhone(input: string): string | null {
+    const digits = (input || '').replace(/\D/g, '')
+    if (digits.length === 11 && digits.startsWith('1')) return digits.slice(1)
+    if (digits.length === 10) return digits
+    return null
+  }
+
+  private formatStoredPhoneFromDigits(digits: string): string {
+    const area = digits.slice(0, 3)
+    const prefix = digits.slice(3, 6)
+    const line = digits.slice(6)
+    return `(${area}) ${prefix}-${line}`
+  }
+
+  async searchVoters(dto: SearchPeopleDTO) {
+    const {
+      state,
+      districtType,
+      districtName,
+      phone,
+      name,
+      firstName,
+      lastName,
+      resultsPerPage,
+      page,
+    } = dto
+
+    this.validateDistrictType(districtType)
+
+    const where: Prisma.VoterWhereInput = {}
+
+    if (state) where.State = state
+
+    const tokens = (name || '').trim().split(/\s+/).filter(Boolean)
+    const hasNameTokens = tokens.length > 0 || firstName || lastName
+
+    if (phone) {
+      const normalized = this.normalizePhone(phone)
+      if (!normalized) {
+        throw new BadRequestException(
+          'Invalid phone number; expected 10 digits',
+        )
+      }
+      const formatted = this.formatStoredPhoneFromDigits(normalized)
+      where.OR = [
+        { VoterTelephones_CellPhoneFormatted: formatted },
+        { VoterTelephones_LandlineFormatted: formatted },
+      ]
+    } else if (hasNameTokens) {
+      const fn = firstName ?? tokens[0]
+      const ln =
+        lastName ?? (tokens.length > 1 ? tokens[tokens.length - 1] : tokens[0])
+
+      if (fn && ln) {
+        where.AND = [
+          { FirstName: { startsWith: fn, mode: 'insensitive' } },
+          { LastName: { startsWith: ln, mode: 'insensitive' } },
+        ]
+      } else {
+        const single = fn || ln
+        where.OR = [
+          { FirstName: { startsWith: single as string, mode: 'insensitive' } },
+          { LastName: { startsWith: single as string, mode: 'insensitive' } },
+        ]
+      }
+    }
+
+    if (districtType && districtName) {
+      ;(where as Record<string, unknown>)[districtType as string] = {
+        equals: districtName,
+      }
+    }
+
+    const take = resultsPerPage
+    const skip = (page - 1) * resultsPerPage
+
+    const select: Prisma.VoterSelect = {
+      id: true,
+      LALVOTERID: true,
+      State: true,
+      FirstName: true,
+      MiddleName: true,
+      LastName: true,
+      NameSuffix: true,
+      VoterTelephones_CellPhoneFormatted: true,
+      VoterTelephones_LandlineFormatted: true,
+      Residence_Addresses_City: true,
+      Residence_Addresses_State: true,
+      Residence_Addresses_Zip: true,
+      Registered_Voter: true,
+      Parties_Description: true,
+    }
+
+    const [totalResults, results] = await Promise.all([
+      this.model.count({ where }),
+      this.model.findMany({
+        where,
+        take,
+        skip,
+        select,
+        orderBy: [{ LastName: 'asc' }, { FirstName: 'asc' }],
+      }),
+    ])
+
+    const totalPages = Math.max(1, Math.ceil(totalResults / resultsPerPage))
+    const currentPage = Math.min(Math.max(1, page), totalPages)
+
+    return {
+      pagination: {
+        totalResults,
+        currentPage,
+        pageSize: resultsPerPage,
+        totalPages,
+        hasNextPage: currentPage < totalPages,
+        hasPreviousPage: currentPage > 1,
+      },
+      results,
+    }
   }
 
   async findPeople(dto: ListPeopleDTO) {
