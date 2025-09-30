@@ -199,7 +199,7 @@ export default $config({
             interval: '30 seconds',
             timeout: '10 seconds',
             healthyThreshold: 2,
-            unhealthyThreshold: 5,
+            unhealthyThreshold: 20,
             gracePeriod: '900 seconds',
           },
         },
