@@ -168,7 +168,7 @@ export default $config({
         preferredBackupWindow: '07:00-09:00',
         storageEncrypted: true,
         skipFinalSnapshot: isDevelop ? true : undefined,
-        databaseInsightsMode: 'advanced'
+        databaseInsightsMode: 'advanced',
       })
       const instanceCount = isProd ? 2 : 1
       for (let i = 0; i < instanceCount; i++) {
@@ -200,7 +200,7 @@ export default $config({
             timeout: '10 seconds',
             healthyThreshold: 2,
             unhealthyThreshold: 5,
-            gracePeriod: '300 seconds',
+            gracePeriod: '900 seconds',
           },
         },
       },
