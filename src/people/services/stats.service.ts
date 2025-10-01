@@ -151,44 +151,47 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
         ),
       )
     if (wants('income')) {
-      const incomeRanges =
-        (numericBuckets as Record<string, [number, number][]>)[
-          'estimatedIncomeAmountInt'
-        ] ||
-        (numericBuckets as Record<string, [number, number][]>)[
-          'Estimated_Income_Amount_Int'
-        ]
-      if (incomeRanges?.length) {
-        pushTask('income', () =>
-          this.computeNumericBuckets(
-            where,
-            'Estimated_Income_Amount_Int',
-            totalConstituents,
-            incomeRanges,
-          ),
-        )
-      } else {
-        const defaultIncomeRanges = StatsService.DEFAULT_INCOME_RANGES
-        pushTask('income', async () => {
-          const numeric = await this.computeNumericBuckets(
-            where,
-            'Estimated_Income_Amount_Int',
-            totalConstituents,
-            defaultIncomeRanges,
+      const hasIncomeIntColumn = await this.voterIncomeIntColumnExists()
+      if (hasIncomeIntColumn) {
+        const incomeRanges =
+          (numericBuckets as Record<string, [number, number][]>)[
+            'estimatedIncomeAmountInt'
+          ] ||
+          (numericBuckets as Record<string, [number, number][]>)[
+            'Estimated_Income_Amount_Int'
+          ]
+        if (incomeRanges?.length) {
+          pushTask('income', () =>
+            this.computeNumericBuckets(
+              where,
+              'Estimated_Income_Amount_Int',
+              totalConstituents,
+              incomeRanges,
+            ),
           )
-          const sumKnown = (
-            numeric.buckets as Array<{ label: string; count: number }>
-          )
-            .filter((b) => b.label !== 'Unknown')
-            .reduce((acc, b) => acc + b.count, 0)
-          if (sumKnown > 0) return numeric
-          return this.computeMappedStringBuckets(
-            where,
-            'Estimated_Income_Amount',
-            totalConstituents,
-            (v) => normalizeIncomeBucket(v),
-          )
-        })
+        } else {
+          const defaultIncomeRanges = StatsService.DEFAULT_INCOME_RANGES
+          pushTask('income', async () => {
+            const numeric = await this.computeNumericBuckets(
+              where,
+              'Estimated_Income_Amount_Int',
+              totalConstituents,
+              defaultIncomeRanges,
+            )
+            const sumKnown = (
+              numeric.buckets as Array<{ label: string; count: number }>
+            )
+              .filter((b) => b.label !== 'Unknown')
+              .reduce((acc, b) => acc + b.count, 0)
+            if (sumKnown > 0) return numeric
+            return this.computeMappedStringBuckets(
+              where,
+              'Estimated_Income_Amount',
+              totalConstituents,
+              (v) => normalizeIncomeBucket(v),
+            )
+          })
+        }
       }
     }
     if (wants('education'))
@@ -952,5 +955,17 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
       where.AND = andClauses
     }
     return where
+  }
+
+  private async voterIncomeIntColumnExists(): Promise<boolean> {
+    const rows = await this.client.$queryRaw<Array<{ exists: number }>>`
+      SELECT 1 as exists
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = ${'Voter'}
+        AND column_name = ${'Estimated_Income_Amount_Int'}
+      LIMIT 1
+    `
+    return rows.length > 0
   }
 }
