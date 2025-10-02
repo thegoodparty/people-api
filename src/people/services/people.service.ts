@@ -106,14 +106,24 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
 
       if (fn && ln) {
         where.AND = [
-          { FirstName: { startsWith: fn, mode: 'insensitive' } },
-          { LastName: { startsWith: ln, mode: 'insensitive' } },
+          { FirstName: { equals: fn, mode: Prisma.QueryMode.default } },
+          { LastName: { equals: ln, mode: Prisma.QueryMode.default } },
         ]
       } else {
         const single = fn || ln
         where.OR = [
-          { FirstName: { startsWith: single as string, mode: 'insensitive' } },
-          { LastName: { startsWith: single as string, mode: 'insensitive' } },
+          {
+            FirstName: {
+              equals: single as string,
+              mode: Prisma.QueryMode.default,
+            },
+          },
+          {
+            LastName: {
+              equals: single as string,
+              mode: Prisma.QueryMode.default,
+            },
+          },
         ]
       }
     }
