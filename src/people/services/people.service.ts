@@ -100,17 +100,19 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
         { VoterTelephones_LandlineFormatted: formatted },
       ]
     } else if (hasNameTokens) {
-      const fn = firstName ?? tokens[0]
-      const ln =
-        lastName ?? (tokens.length > 1 ? tokens[tokens.length - 1] : tokens[0])
+      const explicitFirst = Boolean(firstName)
+      const explicitLast = Boolean(lastName)
+      const twoTokens = tokens.length > 1
 
-      if (fn && ln) {
+      if ((explicitFirst && explicitLast) || twoTokens) {
+        const fn = firstName ?? tokens[0]
+        const ln = lastName ?? tokens[tokens.length - 1]
         where.AND = [
           { FirstName: { equals: fn, mode: Prisma.QueryMode.default } },
           { LastName: { equals: ln, mode: Prisma.QueryMode.default } },
         ]
       } else {
-        const single = fn || ln
+        const single = firstName ?? lastName ?? tokens[0]
         where.OR = [
           {
             FirstName: {
