@@ -10,8 +10,9 @@ import {
 import {
   DownloadPeopleDTO,
   ListPeopleDTO,
-  StatsDTO,
   SamplePeopleDTO,
+  SearchPeopleDTO,
+  StatsDTO,
 } from './people.schema'
 import { PeopleService } from './services/people.service'
 import { StatsService } from './services/stats.service'
@@ -47,6 +48,11 @@ export class PeopleController {
   @Get('sample')
   samplePeople(@Query() dto: SamplePeopleDTO) {
     return this.peopleService.samplePeople(dto)
+  }
+
+  @Get('search')
+  search(@Query() dto: SearchPeopleDTO) {
+    return this.peopleService.searchVoters(dto)
   }
 
   @Get(':id')
