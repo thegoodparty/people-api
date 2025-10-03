@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import {
   DownloadPeopleDTO,
   ListPeopleDTO,
+  SamplePeopleDTO,
   SearchPeopleDTO,
 } from '../people.schema'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
@@ -336,6 +337,60 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       res.raw.off('close', onClose)
       csvStream.end()
     }
+  }
+
+  async samplePeople(dto: SamplePeopleDTO) {
+    const {
+      state,
+      districtType,
+      districtName,
+      electionYear,
+      size = 500,
+      full = true,
+    } = dto
+
+    this.validateDistrictType(districtType as string | undefined)
+
+    const select = this.buildVoterSelect(
+      full,
+      electionYear ?? new Date().getFullYear(),
+      {} as DemographicFilter,
+    )
+
+    const target = Math.max(1, Math.min(size, 5000))
+    const percents = [0.05, 0.5, 5]
+
+    const ids = new Set<string>()
+    for (const p of percents) {
+      if (ids.size >= target) break
+      const whereParts: Prisma.Sql[] = [Prisma.sql`"State" = ${state}`]
+      if (districtType && districtName) {
+        whereParts.push(
+          Prisma.sql`"${Prisma.raw(districtType)}" = ${districtName}`,
+        )
+      }
+      const whereSql = Prisma.sql`WHERE ${Prisma.join(whereParts, ' AND ')}`
+
+      const rows = await this.client.$queryRaw<
+        Array<{ id: string }>
+      >(Prisma.sql`
+        SELECT "id"
+        FROM "Voter" TABLESAMPLE SYSTEM (${Prisma.raw(p.toString())})
+        ${whereSql}
+        LIMIT ${target}
+      `)
+      for (const row of rows) {
+        if (ids.size >= target) break
+        ids.add(row.id)
+      }
+    }
+
+    if (ids.size === 0) return []
+
+    return this.model.findMany({
+      where: { id: { in: Array.from(ids) } },
+      select,
+    })
   }
 
   private buildVoterSelect(
