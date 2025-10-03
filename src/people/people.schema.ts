@@ -206,3 +206,15 @@ export const statsSchema = z.object({
 })
 
 export class StatsDTO extends createZodDto(statsSchema) {}
+
+// ---- Sample DTO ----
+export const samplePeopleSchema = z.object({
+  state: stateSchema,
+  districtType: z.string().optional(),
+  districtName: z.string().optional(),
+  electionYear: electionYearSchema,
+  size: z.coerce.number().int().min(1).max(5000).optional().default(500),
+  full: booleanDefault(true),
+})
+
+export class SamplePeopleDTO extends createZodDto(samplePeopleSchema) {}

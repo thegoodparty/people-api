@@ -7,7 +7,12 @@ import {
   Query,
   Res,
 } from '@nestjs/common'
-import { DownloadPeopleDTO, ListPeopleDTO, StatsDTO } from './people.schema'
+import {
+  DownloadPeopleDTO,
+  ListPeopleDTO,
+  StatsDTO,
+  SamplePeopleDTO,
+} from './people.schema'
 import { PeopleService } from './services/people.service'
 import { StatsService } from './services/stats.service'
 import { FastifyReply } from 'fastify'
@@ -37,6 +42,11 @@ export class PeopleController {
   @Get('stats')
   getStats(@Query() dto: StatsDTO) {
     return this.statsService.getStats(dto)
+  }
+
+  @Get('sample')
+  samplePeople(@Query() dto: SamplePeopleDTO) {
+    return this.peopleService.samplePeople(dto)
   }
 
   @Get(':id')
