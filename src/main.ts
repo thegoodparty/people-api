@@ -1,6 +1,6 @@
 import '../../module-alias'
 import './configrc'
-import { NestFactory } from '@nestjs/core'
+import { HttpAdapterHost, NestFactory } from '@nestjs/core'
 import {
   FastifyAdapter,
   NestFastifyApplication,
@@ -13,6 +13,7 @@ import { Logger } from '@nestjs/common'
 import fastifyStatic from '@fastify/static'
 import { join } from 'path'
 import { ZodValidationPipe } from 'nestjs-zod'
+import { AllExceptionsFilter } from './shared/http-exception.filter'
 import qs from 'qs'
 
 const APP_LISTEN_CONFIG = {
@@ -47,6 +48,9 @@ const bootstrap = async () => {
   )
   app.setGlobalPrefix('v1')
   app.useGlobalPipes(new ZodValidationPipe())
+
+  const httpAdapterHost = app.get(HttpAdapterHost)
+  app.useGlobalFilters(new AllExceptionsFilter(httpAdapterHost))
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('API Documentation')
