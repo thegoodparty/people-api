@@ -369,6 +369,19 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
 
     const ids = await this.collectSampleIds(target, percents, whereSql)
 
+    if (ids.size < target) {
+      const remaining = target - ids.size
+      const extraIds = await this.collectRandomIds(
+        remaining,
+        whereSql,
+        Array.from(ids),
+      )
+      for (const id of extraIds) {
+        if (ids.size >= target) break
+        ids.add(id)
+      }
+    }
+
     if (ids.size === 0) return []
 
     return this.model.findMany({
@@ -429,6 +442,26 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       }
     }
     return ids
+  }
+
+  private async collectRandomIds(
+    remaining: number,
+    whereSql: Prisma.Sql,
+    excludeIds: string[],
+  ): Promise<string[]> {
+    const whereWithExclusion = excludeIds.length
+      ? Prisma.sql`${whereSql} AND "id" NOT IN (${Prisma.join(
+          excludeIds.map((id) => Prisma.sql`${id}::uuid`),
+        )})`
+      : whereSql
+    const rows = await this.client.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT "id"
+      FROM "Voter"
+      ${whereWithExclusion}
+      ORDER BY random()
+      LIMIT ${remaining}
+    `)
+    return rows.map((r) => r.id)
   }
 
   private buildVoterSelect(
