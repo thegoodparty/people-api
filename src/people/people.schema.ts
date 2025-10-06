@@ -245,6 +245,7 @@ export const samplePeopleSchema = z.object({
   electionYear: electionYearSchema,
   size: z.coerce.number().int().min(1).max(5000).optional().default(500),
   full: booleanDefault(true),
+  hasCellPhone: z.coerce.boolean().optional(),
 })
 
 export class SamplePeopleDTO extends createZodDto(samplePeopleSchema) {}

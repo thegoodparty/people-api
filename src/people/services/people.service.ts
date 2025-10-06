@@ -347,6 +347,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       electionYear,
       size = 500,
       full = true,
+      hasCellPhone,
     } = dto
 
     this.validateDistrictType(districtType as string | undefined)
@@ -357,20 +358,63 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       {} as DemographicFilter,
     )
 
-    const target = Math.max(1, Math.min(size, 5000))
-    const percents = [0.05, 0.5, 5]
+    const target = this.clampSampleSize(size)
+    const percents = this.getSamplingPercents()
+    const whereSql = this.buildSampleWhereSql(
+      state,
+      districtType as string | undefined,
+      districtName,
+      hasCellPhone,
+    )
 
+    const ids = await this.collectSampleIds(target, percents, whereSql)
+
+    if (ids.size === 0) return []
+
+    return this.model.findMany({
+      where: { id: { in: Array.from(ids) } },
+      select,
+    })
+  }
+
+  private clampSampleSize(size: number): number {
+    return Math.max(1, Math.min(size, 5000))
+  }
+
+  private getSamplingPercents(): number[] {
+    return [0.05, 0.5, 5]
+  }
+
+  private buildSampleWhereSql(
+    state: string,
+    districtType?: string,
+    districtName?: string,
+    hasCellPhone?: boolean,
+  ): Prisma.Sql {
+    const whereParts: Prisma.Sql[] = [Prisma.sql`"State" = ${state}`]
+    if (districtType && districtName) {
+      whereParts.push(
+        Prisma.sql`"${Prisma.raw(districtType)}" = ${districtName}`,
+      )
+    }
+    if (hasCellPhone === true) {
+      whereParts.push(
+        Prisma.sql`"VoterTelephones_CellPhoneFormatted" IS NOT NULL`,
+      )
+    } else if (hasCellPhone === false) {
+      whereParts.push(Prisma.sql`"VoterTelephones_CellPhoneFormatted" IS NULL`)
+    }
+    return Prisma.sql`WHERE ${Prisma.join(whereParts, ' AND ')}`
+  }
+
+  private async collectSampleIds(
+    target: number,
+    percents: number[],
+    whereSql: Prisma.Sql,
+  ): Promise<Set<string>> {
     const ids = new Set<string>()
     for (const p of percents) {
       if (ids.size >= target) break
-      const whereParts: Prisma.Sql[] = [Prisma.sql`"State" = ${state}`]
-      if (districtType && districtName) {
-        whereParts.push(
-          Prisma.sql`"${Prisma.raw(districtType)}" = ${districtName}`,
-        )
-      }
-      const whereSql = Prisma.sql`WHERE ${Prisma.join(whereParts, ' AND ')}`
-
       const rows = await this.client.$queryRaw<
         Array<{ id: string }>
       >(Prisma.sql`
@@ -384,13 +428,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
         ids.add(row.id)
       }
     }
-
-    if (ids.size === 0) return []
-
-    return this.model.findMany({
-      where: { id: { in: Array.from(ids) } },
-      select,
-    })
+    return ids
   }
 
   private buildVoterSelect(
