@@ -1,6 +1,6 @@
 import '../../module-alias'
 import './configrc'
-import { NestFactory } from '@nestjs/core'
+import { HttpAdapterHost, NestFactory } from '@nestjs/core'
 import {
   FastifyAdapter,
   NestFastifyApplication,
@@ -47,6 +47,10 @@ const bootstrap = async () => {
   )
   app.setGlobalPrefix('v1')
   app.useGlobalPipes(new ZodValidationPipe())
+
+  const httpAdapterHost = app.get(HttpAdapterHost)
+  const { AllExceptionsFilter } = await import('./shared/http-exception.filter')
+  app.useGlobalFilters(new AllExceptionsFilter(httpAdapterHost))
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('API Documentation')
