@@ -13,6 +13,7 @@ import { Logger } from '@nestjs/common'
 import fastifyStatic from '@fastify/static'
 import { join } from 'path'
 import { ZodValidationPipe } from 'nestjs-zod'
+import { AllExceptionsFilter } from './shared/http-exception.filter'
 import qs from 'qs'
 
 const APP_LISTEN_CONFIG = {
@@ -49,7 +50,6 @@ const bootstrap = async () => {
   app.useGlobalPipes(new ZodValidationPipe())
 
   const httpAdapterHost = app.get(HttpAdapterHost)
-  const { AllExceptionsFilter } = await import('./shared/http-exception.filter')
   app.useGlobalFilters(new AllExceptionsFilter(httpAdapterHost))
 
   const swaggerConfig = new DocumentBuilder()
