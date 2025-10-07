@@ -6,6 +6,7 @@ import {
   Param,
   Query,
   Res,
+  Req,
 } from '@nestjs/common'
 import {
   DownloadPeopleDTO,
@@ -26,22 +27,26 @@ export class PeopleController {
   ) {}
 
   @Get()
-  listPeople(@Query() filterDto: ListPeopleDTO) {
+  listPeople(@Query() filterDto: ListPeopleDTO, @Req() req: any) {
+    this.enforceDistrictOrClaim(filterDto, req)
     return this.peopleService.findPeople(filterDto)
   }
 
   @Get('download')
   async downloadPeople(
     @Query() dto: DownloadPeopleDTO,
+    @Req() req: any,
     @Res() res: FastifyReply,
   ) {
+    this.enforceDistrictOrClaim(dto, req)
     res.header('Content-Type', 'text/csv')
     res.header('Content-Disposition', 'attachment; filename="people.csv"')
     await this.peopleService.streamPeopleCsv(dto, res)
   }
 
   @Get('stats')
-  getStats(@Query() dto: StatsDTO) {
+  getStats(@Query() dto: StatsDTO, @Req() req: any) {
+    this.enforceDistrictOrClaim(dto, req)
     return this.statsService.getStats(dto)
   }
 
@@ -51,7 +56,8 @@ export class PeopleController {
   }
 
   @Get('search')
-  search(@Query() dto: SearchPeopleDTO) {
+  search(@Query() dto: SearchPeopleDTO, @Req() req: any) {
+    this.enforceDistrictOrClaim(dto, req)
     return this.peopleService.searchVoters(dto)
   }
 
@@ -67,5 +73,22 @@ export class PeopleController {
     }
 
     return person
+  }
+
+  private enforceDistrictOrClaim(
+    dto: { state?: string; districtType?: string; districtName?: string },
+    req: any,
+  ) {
+    const { districtType, districtName, state } = dto
+    const hasDistrict = Boolean(districtType && districtName)
+    if (hasDistrict) return
+
+    const allowStatewide = req?.s2s?.allowStatewide === true
+    const claimState = req?.s2s?.state
+    if (allowStatewide && state && claimState === state) return
+
+    throw new BadRequestException(
+      'districtType and districtName are required unless a valid statewide claim is present for the given state',
+    )
   }
 }
