@@ -271,7 +271,14 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
       }
     }
 
-    const results = await Promise.all(tasks)
+    // Limit concurrency to reduce Prisma connection pool pressure
+    const concurrency = 4
+    const results: Array<[string, BucketsResult | BucketsWithRaw]> = []
+    for (let i = 0; i < tasks.length; i += concurrency) {
+      const batch = tasks.slice(i, i + concurrency)
+      const batchResults = await Promise.all(batch)
+      results.push(...batchResults)
+    }
     const categoriesOut: StatsCategoryMap = {}
     for (const [name, value] of results) categoriesOut[name] = value
 

@@ -85,7 +85,8 @@ export class PeopleController {
 
     const allowStatewide = req?.s2s?.allowStatewide === true
     const claimState = req?.s2s?.state
-    if (allowStatewide && state && claimState === state) return
+    const matches = allowStatewide && state && claimState === state
+    if (matches) return
 
     throw new BadRequestException(
       'districtType and districtName are required unless a valid statewide claim is present for the given state',
