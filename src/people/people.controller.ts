@@ -18,6 +18,17 @@ import {
 import { PeopleService } from './services/people.service'
 import { StatsService } from './services/stats.service'
 import { FastifyReply } from 'fastify'
+import type { FastifyRequest } from 'fastify'
+
+type S2SPayload = {
+  allowStatewide?: boolean
+  state?: string
+  iss?: string
+  iat?: number
+  exp?: number
+}
+
+type S2SRequest = FastifyRequest & { s2s?: S2SPayload }
 
 @Controller('people')
 export class PeopleController {
@@ -27,7 +38,7 @@ export class PeopleController {
   ) {}
 
   @Get()
-  listPeople(@Query() filterDto: ListPeopleDTO, @Req() req: any) {
+  listPeople(@Query() filterDto: ListPeopleDTO, @Req() req: S2SRequest) {
     this.enforceDistrictOrClaim(filterDto, req)
     return this.peopleService.findPeople(filterDto)
   }
@@ -35,7 +46,7 @@ export class PeopleController {
   @Get('download')
   async downloadPeople(
     @Query() dto: DownloadPeopleDTO,
-    @Req() req: any,
+    @Req() req: S2SRequest,
     @Res() res: FastifyReply,
   ) {
     this.enforceDistrictOrClaim(dto, req)
@@ -45,7 +56,7 @@ export class PeopleController {
   }
 
   @Get('stats')
-  getStats(@Query() dto: StatsDTO, @Req() req: any) {
+  getStats(@Query() dto: StatsDTO, @Req() req: S2SRequest) {
     this.enforceDistrictOrClaim(dto, req)
     return this.statsService.getStats(dto)
   }
@@ -56,7 +67,7 @@ export class PeopleController {
   }
 
   @Get('search')
-  search(@Query() dto: SearchPeopleDTO, @Req() req: any) {
+  search(@Query() dto: SearchPeopleDTO, @Req() req: S2SRequest) {
     this.enforceDistrictOrClaim(dto, req)
     return this.peopleService.searchVoters(dto)
   }
@@ -77,7 +88,7 @@ export class PeopleController {
 
   private enforceDistrictOrClaim(
     dto: { state?: string; districtType?: string; districtName?: string },
-    req: any,
+    req: S2SRequest,
   ) {
     const { districtType, districtName, state } = dto
     const hasDistrict = Boolean(districtType && districtName)
