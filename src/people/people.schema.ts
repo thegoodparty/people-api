@@ -123,15 +123,20 @@ const demographicFilterSchema = z.record(fieldOpsSchema)
 
 export const listPeopleSchema = z.object({
   state: stateSchema,
-  districtType: z.string(),
-  districtName: z.string(),
+  districtType: z.string().optional(),
+  districtName: z.string().optional(),
   electionYear: electionYearSchema,
   filters: filtersSchema,
   full: booleanDefault(true),
   resultsPerPage: z.coerce.number().optional().default(50),
   page: z.coerce.number().optional().default(1),
   filter: demographicFilterSchema.optional().default({}),
-})
+}).refine(
+  (v) =>
+    (v.districtType && v.districtName) ||
+    (!v.districtType && !v.districtName),
+  'districtType and districtName must be provided together',
+)
 
 export class ListPeopleDTO extends createZodDto(listPeopleSchema) {}
 
