@@ -6,23 +6,16 @@ import {
   SearchPeopleDTO,
 } from '../people.schema'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
+import { SampleService } from './sample.service'
 import {
   DEMOGRAPHIC_FILTER_FIELDS,
   DemographicFilter,
   FieldFilterOps,
   FilterFieldType,
 } from '../people.filters'
+import { buildVoterSelect } from '../people.select'
 import { BadRequestException, Injectable } from '@nestjs/common'
-import {
-  AllowedFilter,
-  AnyElectionYearKey,
-  GeneralYearKey,
-  OtherElectionYearKey,
-  PerformanceFieldKey,
-  PresidentialPrimaryYearKey,
-  PrimaryYearKey,
-  YearSelectKey,
-} from '../people.types'
+import { AllowedFilter, PerformanceFieldKey } from '../people.types'
 import { FastifyReply } from 'fastify'
 import { format } from '@fast-csv/format'
 import type { RowMap } from '@fast-csv/format'
@@ -339,215 +332,19 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     }
   }
 
+  constructor(private readonly sampleService: SampleService) {
+    super()
+  }
+
   async samplePeople(dto: SamplePeopleDTO) {
-    const {
-      state,
-      districtType,
-      districtName,
-      electionYear,
-      size = 500,
-      full = true,
-      hasCellPhone,
-    } = dto
-
-    this.validateDistrictType(districtType as string | undefined)
-
-    const select = this.buildVoterSelect(
-      full,
-      electionYear ?? new Date().getFullYear(),
-      {} as DemographicFilter,
-    )
-
-    const target = this.clampSampleSize(size)
-    const percents = this.getSamplingPercents()
-    const whereSql = this.buildSampleWhereSql(
-      state,
-      districtType as string | undefined,
-      districtName,
-      hasCellPhone,
-    )
-
-    const ids = await this.collectSampleIds(target, percents, whereSql)
-
-    if (ids.size < target) {
-      const remaining = target - ids.size
-      const extraIds = await this.collectRandomIds(
-        remaining,
-        whereSql,
-        Array.from(ids),
-      )
-      for (const id of extraIds) {
-        if (ids.size >= target) break
-        ids.add(id)
-      }
-    }
-
-    if (ids.size === 0) return []
-
-    return this.model.findMany({
-      where: { id: { in: Array.from(ids) } },
-      select,
-    })
+    return this.sampleService.samplePeople(dto)
   }
-
-  private clampSampleSize(size: number): number {
-    return Math.max(1, Math.min(size, 5000))
-  }
-
-  private getSamplingPercents(): number[] {
-    return [0.05, 0.5, 5]
-  }
-
-  private buildSampleWhereSql(
-    state: string,
-    districtType?: string,
-    districtName?: string,
-    hasCellPhone?: boolean,
-  ): Prisma.Sql {
-    const whereParts: Prisma.Sql[] = [Prisma.sql`"State" = ${state}`]
-    if (districtType && districtName) {
-      whereParts.push(
-        Prisma.sql`"${Prisma.raw(districtType)}" = ${districtName}`,
-      )
-    }
-    if (hasCellPhone === true) {
-      whereParts.push(
-        Prisma.sql`"VoterTelephones_CellPhoneFormatted" IS NOT NULL`,
-      )
-    } else if (hasCellPhone === false) {
-      whereParts.push(Prisma.sql`"VoterTelephones_CellPhoneFormatted" IS NULL`)
-    }
-    return Prisma.sql`WHERE ${Prisma.join(whereParts, ' AND ')}`
-  }
-
-  private async collectSampleIds(
-    target: number,
-    percents: number[],
-    whereSql: Prisma.Sql,
-  ): Promise<Set<string>> {
-    const ids = new Set<string>()
-    for (const p of percents) {
-      if (ids.size >= target) break
-      const rows = await this.client.$queryRaw<
-        Array<{ id: string }>
-      >(Prisma.sql`
-        SELECT "id"
-        FROM "Voter" TABLESAMPLE SYSTEM (${Prisma.raw(p.toString())})
-        ${whereSql}
-        LIMIT ${target}
-      `)
-      for (const row of rows) {
-        if (ids.size >= target) break
-        ids.add(row.id)
-      }
-    }
-    return ids
-  }
-
-  private async collectRandomIds(
-    remaining: number,
-    whereSql: Prisma.Sql,
-    excludeIds: string[],
-  ): Promise<string[]> {
-    const whereWithExclusion = excludeIds.length
-      ? Prisma.sql`${whereSql} AND "id" NOT IN (${Prisma.join(
-          excludeIds.map((id) => Prisma.sql`${id}::uuid`),
-        )})`
-      : whereSql
-    const rows = await this.client.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-      SELECT "id"
-      FROM "Voter"
-      ${whereWithExclusion}
-      ORDER BY random()
-      LIMIT ${remaining}
-    `)
-    return rows.map((r) => r.id)
-  }
-
   private buildVoterSelect(
     full: boolean,
     electionYear: number,
-    _demographicFilter: DemographicFilter,
+    demographicFilter: DemographicFilter,
   ): Prisma.VoterSelect {
-    const isEvenYear = electionYear % 2 === 0
-    if (full) {
-      const select: Prisma.VoterSelect = {
-        id: true,
-        LALVOTERID: true,
-        State: true,
-        FirstName: true,
-        MiddleName: true,
-        LastName: true,
-        NameSuffix: true,
-        Residence_Addresses_AddressLine: true,
-        Residence_Addresses_ExtraAddressLine: true,
-        Residence_Addresses_City: true,
-        Residence_Addresses_State: true,
-        Residence_Addresses_Zip: true,
-        Residence_Addresses_ZipPlus4: true,
-        Mailing_Addresses_AddressLine: true,
-        Mailing_Addresses_ExtraAddressLine: true,
-        Mailing_Addresses_City: true,
-        Mailing_Addresses_State: true,
-        Mailing_Addresses_Zip: true,
-        Mailing_Addresses_ZipPlus4: true,
-        VoterTelephones_LandlineFormatted: true,
-        VoterTelephones_CellPhoneFormatted: true,
-        Age: true,
-        Gender: true,
-        Parties_Description: true,
-        US_Congressional_District: true,
-        State_Senate_District: true,
-        State_House_District: true,
-        County: true,
-        City: true,
-        Precinct: true,
-      }
-
-      if (isEvenYear) {
-        ;(select as Record<YearSelectKey, boolean>)[
-          `General_${electionYear}` as GeneralYearKey
-        ] = true
-        ;(select as Record<YearSelectKey, boolean>)[
-          `Primary_${electionYear}` as PrimaryYearKey
-        ] = true
-        ;(select as Record<YearSelectKey, boolean>)[
-          `OtherElection_${electionYear}` as OtherElectionYearKey
-        ] = true
-        if (electionYear % 4 === 0) {
-          ;(select as Record<YearSelectKey, boolean>)[
-            `PresidentialPrimary_${electionYear}` as PresidentialPrimaryYearKey
-          ] = true
-        }
-      } else {
-        ;(select as Record<YearSelectKey, boolean>)[
-          `AnyElection_${electionYear}` as AnyElectionYearKey
-        ] = true
-      }
-
-      this.addAllDemographicColumnsToSelect(select)
-
-      return select
-    }
-    const minimal: Prisma.VoterSelect = {
-      LALVOTERID: true,
-      State: true,
-      FirstName: true,
-      LastName: true,
-      Residence_Addresses_City: true,
-      Residence_Addresses_State: true,
-      Residence_Addresses_Zip: true,
-    }
-
-    this.addAllDemographicColumnsToSelect(minimal)
-
-    return minimal
-  }
-
-  private addAllDemographicColumnsToSelect(select: Prisma.VoterSelect): void {
-    for (const spec of Object.values(DEMOGRAPHIC_FILTER_FIELDS)) {
-      ;(select as Record<string, boolean>)[spec.prismaField as string] = true
-    }
+    return buildVoterSelect(full, electionYear, demographicFilter)
   }
 
   private buildWhere(options: {
