@@ -92,7 +92,7 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
 
     const where = this.buildWhere({
       state,
-      districtType: districtType as keyof Prisma.VoterWhereInput | undefined,
+      districtType: districtType as string | undefined,
       districtName,
       filters,
       performanceField,
@@ -526,7 +526,7 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
 
   private buildWhere(options: {
     state: string
-    districtType?: keyof Prisma.VoterWhereInput | undefined
+    districtType?: string | undefined
     districtName?: string | undefined
     filters: AllowedFilter[]
     performanceField: PerformanceFieldKey
@@ -545,8 +545,10 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
     const where: Prisma.VoterWhereInput = { State: state }
 
     if (districtType && districtName) {
-      ;(where as Record<string, unknown>)[districtType] = {
-        equals: districtName,
+      where.DistrictLinks = {
+        some: {
+          district: { type: districtType as string, name: districtName, state },
+        },
       }
     }
 

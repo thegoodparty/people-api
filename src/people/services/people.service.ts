@@ -33,18 +33,6 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
   private static readonly API_FIELD_MAX_CHARS = 100
   private static readonly API_FIELD_MAX_VALUES = 50
 
-  private validateDistrictType(districtType?: string): void {
-    if (!districtType) return
-    const isValidField = Object.values(Prisma.VoterScalarFieldEnum).includes(
-      districtType as Prisma.VoterScalarFieldEnum,
-    )
-    if (!isValidField) {
-      throw new BadRequestException(
-        `Unsupported districtType: ${districtType as string}`,
-      )
-    }
-  }
-
   private getPerformanceField(electionYear: number): PerformanceFieldKey {
     const isEvenYear = electionYear % 2 === 0
     return isEvenYear
@@ -78,8 +66,6 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       resultsPerPage,
       page,
     } = dto
-
-    this.validateDistrictType(districtType)
 
     const where: Prisma.VoterWhereInput = {}
 
@@ -132,8 +118,10 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     }
 
     if (districtType && districtName) {
-      ;(where as Record<string, unknown>)[districtType as string] = {
-        equals: districtName,
+      where.DistrictLinks = {
+        some: {
+          district: { type: districtType, name: districtName, state },
+        },
       }
     }
 
@@ -198,14 +186,11 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     } = dto
     const model = this.model
 
-    // Validate districtType against Prisma enum if provided
-    this.validateDistrictType(districtType)
-
     const performanceField = this.getPerformanceField(electionYear)
 
     const where = this.buildWhere({
       state,
-      districtType: districtType as keyof Prisma.VoterWhereInput | undefined,
+      districtType,
       districtName,
       filters,
       performanceField,
@@ -253,12 +238,9 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     } = dto
 
     const districtType = (dto.districtType ?? dto.electionLocation) as
-      | keyof Prisma.VoterWhereInput
+      | string
       | undefined
     const districtName = dto.districtName ?? dto.electionType
-
-    // Validate districtType against Prisma enum if provided
-    this.validateDistrictType(districtType as string | undefined)
 
     const performanceField = this.getPerformanceField(electionYear)
 
@@ -350,8 +332,6 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       hasCellPhone,
     } = dto
 
-    this.validateDistrictType(districtType as string | undefined)
-
     const select = this.buildVoterSelect(
       full,
       electionYear ?? new Date().getFullYear(),
@@ -404,18 +384,20 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     districtName?: string,
     hasCellPhone?: boolean,
   ): Prisma.Sql {
-    const whereParts: Prisma.Sql[] = [Prisma.sql`"State" = ${state}`]
+    const whereParts: Prisma.Sql[] = [Prisma.sql`v."State" = ${state}`]
     if (districtType && districtName) {
       whereParts.push(
-        Prisma.sql`"${Prisma.raw(districtType)}" = ${districtName}`,
+        Prisma.sql`d."type" = ${districtType} AND d."name" = ${districtName} AND d."state" = ${state}`,
       )
     }
     if (hasCellPhone === true) {
       whereParts.push(
-        Prisma.sql`"VoterTelephones_CellPhoneFormatted" IS NOT NULL`,
+        Prisma.sql`v."VoterTelephones_CellPhoneFormatted" IS NOT NULL`,
       )
     } else if (hasCellPhone === false) {
-      whereParts.push(Prisma.sql`"VoterTelephones_CellPhoneFormatted" IS NULL`)
+      whereParts.push(
+        Prisma.sql`v."VoterTelephones_CellPhoneFormatted" IS NULL`,
+      )
     }
     return Prisma.sql`WHERE ${Prisma.join(whereParts, ' AND ')}`
   }
@@ -431,8 +413,10 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       const rows = await this.client.$queryRaw<
         Array<{ id: string }>
       >(Prisma.sql`
-        SELECT "id"
-        FROM "Voter" TABLESAMPLE SYSTEM (${Prisma.raw(p.toString())})
+        SELECT v."id"
+        FROM "Voter" v TABLESAMPLE SYSTEM (${Prisma.raw(p.toString())})
+        JOIN "DistrictVoter" dv ON dv."voter_id" = v."id"
+        JOIN "District" d ON d."id" = dv."district_id"
         ${whereSql}
         LIMIT ${target}
       `)
@@ -450,13 +434,12 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     excludeIds: string[],
   ): Promise<string[]> {
     const whereWithExclusion = excludeIds.length
-      ? Prisma.sql`${whereSql} AND "id" NOT IN (${Prisma.join(
+      ? Prisma.sql`${whereSql} AND v."id" NOT IN (${Prisma.join(
           excludeIds.map((id) => Prisma.sql`${id}::uuid`),
         )})`
       : whereSql
     const rows = await this.client.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-      SELECT "id"
-      FROM "Voter"
+      SELECT v."id"
       ${whereWithExclusion}
       ORDER BY random()
       LIMIT ${remaining}
@@ -496,12 +479,6 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
         Age: true,
         Gender: true,
         Parties_Description: true,
-        US_Congressional_District: true,
-        State_Senate_District: true,
-        State_House_District: true,
-        County: true,
-        City: true,
-        Precinct: true,
       }
 
       if (isEvenYear) {
@@ -552,7 +529,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
 
   private buildWhere(options: {
     state: string
-    districtType?: keyof Prisma.VoterWhereInput | undefined
+    districtType?: string | undefined
     districtName?: string | undefined
     filters: AllowedFilter[]
     performanceField: PerformanceFieldKey
@@ -571,9 +548,10 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     const where: Prisma.VoterWhereInput = { State: state }
 
     if (districtType && districtName) {
-      // This cast allows us to avoid making a code change every time a new district type is introduced
-      ;(where as Record<string, unknown>)[districtType] = {
-        equals: districtName,
+      where.DistrictLinks = {
+        some: {
+          district: { type: districtType, name: districtName, state },
+        },
       }
     }
 
