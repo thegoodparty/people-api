@@ -1,0 +1,11 @@
+model District {
+    id         String          @id @map("id") @db.Uuid // !!!! Must match election-api District ID
+    createdAt  DateTime        @default(now()) @map("created_at")
+    updatedAt  DateTime        @updatedAt @map("updated_at")
+    type       String
+    name       String
+    state      String
+    VoterLinks DistrictVoter[]
+
+    @@index([type, name, state])
+}

@@ -28,7 +28,27 @@ export class S2SAuthGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest()
 
-    // Prefer validating Authorization header when present, even on localhost
+    // Optional localhost bypass for development/testing
+    if (
+      process.env.S2S_ALLOW_LOCALHOST &&
+      /^true|1|yes$/i.test(process.env.S2S_ALLOW_LOCALHOST)
+    ) {
+      const ip = request.ip || request.socket?.remoteAddress || ''
+      const host = request.headers.host || ''
+
+      const isLocalhost =
+        ip === '127.0.0.1' ||
+        ip === '::1' ||
+        ip === '::ffff:127.0.0.1' ||
+        host.startsWith('localhost') ||
+        host.startsWith('127.0.0.1')
+
+      if (isLocalhost) {
+        return true
+      }
+    }
+
+    // Validate Authorization header
     const authHeader: string | undefined = request.headers['authorization']
     if (authHeader) {
       const [scheme, token] = authHeader.split(' ')
@@ -47,20 +67,9 @@ export class S2SAuthGuard implements CanActivate {
         // e.g., (payload as any).iss === 'gp-api'
         request.s2s = payload
         return true
-      } catch (err) {
+      } catch (_err) {
         throw new UnauthorizedException('Invalid or expired token')
       }
-    }
-
-    // Optional localhost bypass for development/testing only if no header provided
-    if (
-      process.env.S2S_ALLOW_LOCALHOST &&
-      /^true|1|yes$/i.test(process.env.S2S_ALLOW_LOCALHOST) &&
-      (request.ip === '127.0.0.1' ||
-        request.ip === '::1' ||
-        request.hostname === 'localhost')
-    ) {
-      return true
     }
 
     throw new UnauthorizedException('Missing Authorization header')
