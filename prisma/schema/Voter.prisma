@@ -236,10 +236,10 @@ model Voter {
     Judicial_Juvenile_Court_District                 String? @db.Text() // District
     Judicial_Magistrate_Division                     String? @db.Text() // District
     Judicial_Municipal_Court_District                String? @db.Text() // District
-    Judicial_Sub_Circuit_District                    String? @db.Text()
+    Judicial_Sub_Circuit_District                    String? @db.Text() // District
     Judicial_Superior_Court_District                 String? @db.Text() // District
     Judicial_Supreme_Court_District                  String? @db.Text() // District
-    Landscaping_and_Lighting_Assessment_District     String? @db.Text()
+    Landscaping_and_Lighting_Assessment_District     String? @db.Text() // District
     Land_Commission                                  String? @db.Text() // District
     Law_Enforcement_District                         String? @db.Text() // District
     Learning_Community_Coordinating_Council_District String? @db.Text() // District
@@ -311,7 +311,7 @@ model Voter {
     Sanitary_SubDistrict                             String? @db.Text() // District
     School_Board_District                            String? @db.Text() // District
     School_District                                  String? @db.Text() // District
-    School_District_Vocational                       String? @db.Text()
+    School_District_Vocational                       String? @db.Text() // District
     School_Facilities_Improvement_District           String? @db.Text() // District
     School_Subdistrict                               String? @db.Text() // District
     Service_Area_District                            String? @db.Text() // District
@@ -361,6 +361,8 @@ model Voter {
     Water_Replacement_SubDistrict                    String? @db.Text() // District
     Water_SubDistrict                                String? @db.Text() // District
     Weed_District                                    String? @db.Text() // District
+
+    DistrictLinks DistrictVoter[]
 
     // District Indexes
     @@index([US_Congressional_District])
