@@ -13,17 +13,9 @@ import {
   FieldFilterOps,
   FilterFieldType,
 } from '../people.filters'
+import { buildVoterSelect } from '../people.select'
 import { BadRequestException, Injectable } from '@nestjs/common'
-import {
-  AllowedFilter,
-  AnyElectionYearKey,
-  GeneralYearKey,
-  OtherElectionYearKey,
-  PerformanceFieldKey,
-  PresidentialPrimaryYearKey,
-  PrimaryYearKey,
-  YearSelectKey,
-} from '../people.types'
+import { AllowedFilter, PerformanceFieldKey } from '../people.types'
 import { FastifyReply } from 'fastify'
 import { format } from '@fast-csv/format'
 import type { RowMap } from '@fast-csv/format'
@@ -350,87 +342,9 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
   private buildVoterSelect(
     full: boolean,
     electionYear: number,
-    _demographicFilter: DemographicFilter,
+    demographicFilter: DemographicFilter,
   ): Prisma.VoterSelect {
-    const isEvenYear = electionYear % 2 === 0
-    if (full) {
-      const select: Prisma.VoterSelect = {
-        id: true,
-        LALVOTERID: true,
-        State: true,
-        FirstName: true,
-        MiddleName: true,
-        LastName: true,
-        NameSuffix: true,
-        Residence_Addresses_AddressLine: true,
-        Residence_Addresses_ExtraAddressLine: true,
-        Residence_Addresses_City: true,
-        Residence_Addresses_State: true,
-        Residence_Addresses_Zip: true,
-        Residence_Addresses_ZipPlus4: true,
-        Mailing_Addresses_AddressLine: true,
-        Mailing_Addresses_ExtraAddressLine: true,
-        Mailing_Addresses_City: true,
-        Mailing_Addresses_State: true,
-        Mailing_Addresses_Zip: true,
-        Mailing_Addresses_ZipPlus4: true,
-        VoterTelephones_LandlineFormatted: true,
-        VoterTelephones_CellPhoneFormatted: true,
-        Age: true,
-        Gender: true,
-        Parties_Description: true,
-        US_Congressional_District: true,
-        State_Senate_District: true,
-        State_House_District: true,
-        County: true,
-        City: true,
-        Precinct: true,
-      }
-
-      if (isEvenYear) {
-        ;(select as Record<YearSelectKey, boolean>)[
-          `General_${electionYear}` as GeneralYearKey
-        ] = true
-        ;(select as Record<YearSelectKey, boolean>)[
-          `Primary_${electionYear}` as PrimaryYearKey
-        ] = true
-        ;(select as Record<YearSelectKey, boolean>)[
-          `OtherElection_${electionYear}` as OtherElectionYearKey
-        ] = true
-        if (electionYear % 4 === 0) {
-          ;(select as Record<YearSelectKey, boolean>)[
-            `PresidentialPrimary_${electionYear}` as PresidentialPrimaryYearKey
-          ] = true
-        }
-      } else {
-        ;(select as Record<YearSelectKey, boolean>)[
-          `AnyElection_${electionYear}` as AnyElectionYearKey
-        ] = true
-      }
-
-      this.addAllDemographicColumnsToSelect(select)
-
-      return select
-    }
-    const minimal: Prisma.VoterSelect = {
-      LALVOTERID: true,
-      State: true,
-      FirstName: true,
-      LastName: true,
-      Residence_Addresses_City: true,
-      Residence_Addresses_State: true,
-      Residence_Addresses_Zip: true,
-    }
-
-    this.addAllDemographicColumnsToSelect(minimal)
-
-    return minimal
-  }
-
-  private addAllDemographicColumnsToSelect(select: Prisma.VoterSelect): void {
-    for (const spec of Object.values(DEMOGRAPHIC_FILTER_FIELDS)) {
-      ;(select as Record<string, boolean>)[spec.prismaField as string] = true
-    }
+    return buildVoterSelect(full, electionYear, demographicFilter)
   }
 
   private buildWhere(options: {
