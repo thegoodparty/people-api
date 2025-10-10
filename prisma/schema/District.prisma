@@ -1,9 +1,63 @@
+enum USState {
+    AL
+    AK
+    AZ
+    AR
+    CA
+    CO
+    CT
+    DE
+    FL
+    GA
+    HI
+    ID
+    IL
+    IN
+    IA
+    KS
+    KY
+    LA
+    ME
+    MD
+    MA
+    MI
+    MN
+    MS
+    MO
+    MT
+    NE
+    NV
+    NH
+    NJ
+    NM
+    NY
+    NC
+    ND
+    OH
+    OK
+    OR
+    PA
+    RI
+    SC
+    SD
+    TN
+    TX
+    UT
+    VT
+    VA
+    WA
+    WV
+    WI
+    WY
+}
+
 model District {
     id         String          @id @map("id") @db.Uuid // !!!! Must match election-api District ID
     createdAt  DateTime        @default(now()) @map("created_at")
     updatedAt  DateTime        @updatedAt @map("updated_at")
     type       String
     name       String
-    state      String
+    state      USState
     VoterLinks DistrictVoter[]
+    // TODO: Add composite unique: [ type, name, state ]
 }
