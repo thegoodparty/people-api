@@ -395,7 +395,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
   }
 
   private getSamplingPercents(): number[] {
-    return [0.05, 0.5, 5]
+    return [0.5, 2, 5]
   }
 
   private buildSampleWhereSql(
