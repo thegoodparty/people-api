@@ -12,7 +12,7 @@ import {
   FieldFilterOps,
   FilterFieldType,
 } from '../people.filters'
-import { BadRequestException, Injectable } from '@nestjs/common'
+import { BadRequestException, Injectable, Logger } from '@nestjs/common'
 import {
   AllowedFilter,
   AnyElectionYearKey,
@@ -32,6 +32,22 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
   private static readonly MAX_FIELDS = 15
   private static readonly API_FIELD_MAX_CHARS = 100
   private static readonly API_FIELD_MAX_VALUES = 50
+  readonly logger = new Logger(PeopleService.name)
+  private systemRowsAvailable: boolean | null = null
+
+  private async ensureSystemRowsCapability(): Promise<boolean> {
+    if (this.systemRowsAvailable !== null) return this.systemRowsAvailable
+    try {
+      await this.client.$queryRaw(Prisma.sql`
+        SELECT 1 FROM "Voter" TABLESAMPLE SYSTEM_ROWS (1) LIMIT 1
+      `)
+      this.systemRowsAvailable = true
+    } catch {
+      this.systemRowsAvailable = false
+    }
+    this.logger.debug(`SYSTEM_ROWS available=${this.systemRowsAvailable}`)
+    return this.systemRowsAvailable
+  }
 
   private validateDistrictType(districtType?: string): void {
     if (!districtType) return
@@ -350,6 +366,15 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       hasCellPhone,
     } = dto
 
+    const t0 = Date.now()
+    this.logger.debug(
+      `samplePeople start state=${state} districtType=${String(
+        districtType,
+      )} districtName=${String(districtName)} size=${size} full=${full} hasCellPhone=${String(
+        hasCellPhone,
+      )} electionYear=${String(electionYear)}`,
+    )
+
     this.validateDistrictType(districtType as string | undefined)
 
     const select = this.buildVoterSelect(
@@ -360,17 +385,24 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
 
     const target = this.clampSampleSize(size)
     const percents = this.getSamplingPercents()
+    const tWhere0 = Date.now()
     const whereSql = this.buildSampleWhereSql(
       state,
       districtType as string | undefined,
       districtName,
       hasCellPhone,
     )
+    this.logger.debug(`buildSampleWhereSql ms=${Date.now() - tWhere0}`)
 
+    const tCollect0 = Date.now()
     const ids = await this.collectSampleIds(target, percents, whereSql)
+    this.logger.debug(
+      `collectSampleIds done unique=${ids.size} ms=${Date.now() - tCollect0}`,
+    )
 
     if (ids.size < target) {
       const remaining = target - ids.size
+      const tFallback0 = Date.now()
       const extraIds = await this.collectRandomIds(
         remaining,
         whereSql,
@@ -380,14 +412,26 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
         if (ids.size >= target) break
         ids.add(id)
       }
+      this.logger.debug(
+        `collectRandomIds filled=${extraIds.length} uniqueNow=${ids.size} ms=${
+          Date.now() - tFallback0
+        }`,
+      )
     }
 
     if (ids.size === 0) return []
 
-    return this.model.findMany({
+    const tFind0 = Date.now()
+    const people = await this.model.findMany({
       where: { id: { in: Array.from(ids) } },
       select,
     })
+    this.logger.debug(
+      `findMany sample size=${people.length} ms=${Date.now() - tFind0} totalMs=${
+        Date.now() - t0
+      }`,
+    )
+    return people
   }
 
   private clampSampleSize(size: number): number {
@@ -426,21 +470,36 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     whereSql: Prisma.Sql,
   ): Promise<Set<string>> {
     const ids = new Set<string>()
-    for (const p of percents) {
+    const t0 = Date.now()
+
+    const divisors: number[] = [1000, 500, 200, 100, 50, 20, 10, 5, 2, 1]
+
+    for (const d of divisors) {
       if (ids.size >= target) break
+      const remaining = target - ids.size
+      const bucket = Math.floor(Math.random() * d)
+      const tPass0 = Date.now()
+      const condition = Prisma.sql`(abs(pg_catalog.hashtextextended("id"::text, 0)) % ${d}) = ${bucket}`
       const rows = await this.client.$queryRaw<
         Array<{ id: string }>
       >(Prisma.sql`
         SELECT "id"
-        FROM "Voter" TABLESAMPLE SYSTEM (${Prisma.raw(p.toString())})
-        ${whereSql}
-        LIMIT ${target}
+        FROM "Voter"
+        ${whereSql} AND ${condition}
+        LIMIT ${remaining}
       `)
       for (const row of rows) {
         if (ids.size >= target) break
         ids.add(row.id)
       }
+      this.logger.debug(
+        `collectSampleIds uuid-bucket divisor=${d} bucket=${bucket} rows=${rows.length} unique=${ids.size} ms=${
+          Date.now() - tPass0
+        }`,
+      )
     }
+
+    this.logger.debug(`collectSampleIds totalMs=${Date.now() - t0}`)
     return ids
   }
 
@@ -449,11 +508,13 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     whereSql: Prisma.Sql,
     excludeIds: string[],
   ): Promise<string[]> {
+    const t0 = Date.now()
     const whereWithExclusion = excludeIds.length
       ? Prisma.sql`${whereSql} AND "id" NOT IN (${Prisma.join(
           excludeIds.map((id) => Prisma.sql`${id}::uuid`),
         )})`
       : whereSql
+    const tQuery0 = Date.now()
     const rows = await this.client.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT "id"
       FROM "Voter"
@@ -461,6 +522,11 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       ORDER BY random()
       LIMIT ${remaining}
     `)
+    this.logger.debug(
+      `collectRandomIds rows=${rows.length} remaining=${remaining} queryMs=${
+        Date.now() - tQuery0
+      } totalMs=${Date.now() - t0}`,
+    )
     return rows.map((r) => r.id)
   }
 
