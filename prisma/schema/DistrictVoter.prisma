@@ -2,6 +2,7 @@ model DistrictVoter {
     districtId String   @map("district_id") @db.Uuid
     voterId    String   @map("voter_id") @db.Uuid
     createdAt  DateTime @default(now()) @map("created_at")
+    updatedAt  DateTime @updatedAt @map("updated_at")
 
     district District @relation(fields: [districtId], references: [id], onDelete: Cascade)
     voter    Voter    @relation(fields: [voterId], references: [id], onDelete: Cascade)

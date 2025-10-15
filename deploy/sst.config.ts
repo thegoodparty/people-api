@@ -204,18 +204,7 @@ export default $config({
           },
         },
       },
-      capacity: isProd
-        ? {
-            fargate: { weight: 1, base: 1 },
-            spot: { weight: 1 },
-          }
-        : isDevelop
-          ? {
-              spot: { weight: 1, base: 1 },
-            }
-          : {
-              spot: { weight: 1, base: 1 },
-            },
+      capacity: { fargate: { weight: 1 } },
       memory: isProd ? '4 GB' : '2 GB',
       cpu: isProd ? '1 vCPU' : '0.5 vCPU',
       scaling: {
