@@ -35,12 +35,14 @@
     "jsonwebtoken": "^9.0.2",
     "lodash": "^4.17.21",
     "module-alias": "^2.2.3",
+    "nestjs-pino": "^4.4.1",
     "nestjs-zod": "^4.3.1",
+    "pino-http": "^10.5.0",
     "prisma": "^6.4.1",
+    "qs": "^6.13.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "zod": "^3.24.2",
-    "qs": "^6.13.0"
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.0",
