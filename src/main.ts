@@ -17,6 +17,7 @@ import { AllExceptionsFilter } from './shared/http-exception.filter'
 import qs from 'qs'
 import { randomUUID } from 'crypto'
 import { IncomingMessage } from 'http'
+import { Http2ServerRequest } from 'http2'
 
 const APP_LISTEN_CONFIG = {
   port: Number(process.env.PORT) || 3000,
@@ -28,7 +29,7 @@ const bootstrap = async () => {
     AppModule,
     new FastifyAdapter({
       disableRequestLogging: true,
-      genReqId: (req: IncomingMessage) =>
+      genReqId: (req: IncomingMessage | Http2ServerRequest) =>
         (req.headers['x-request-id'] as string) || randomUUID(),
       // Ensure bracketed query params like filters[] and filter[field][op] parse correctly
       querystringParser: (str) =>
