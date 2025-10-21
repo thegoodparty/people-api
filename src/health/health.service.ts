@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { serializeError } from 'src/shared/logging.util'
 import { PrismaService } from '../prisma/prisma.service'
 
 @Injectable()
