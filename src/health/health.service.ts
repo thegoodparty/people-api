@@ -21,8 +21,8 @@ export class HealthService {
       await this.prisma.$queryRaw`SELECT 1`
       this.logger.debug('Database health check passed')
       return true
-    } catch (error) {
-      this.logger.error('Health check failed', { error })
+    } catch (err) {
+      this.logger.error({ err }, 'Health check failed')
       return false
     }
   }
