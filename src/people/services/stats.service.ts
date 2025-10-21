@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
 import {
@@ -317,9 +317,10 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
 
     const promises = [...tasks, unknownTask]
 
-    this.logger.log('Issuing queries to compute numeric buckets', {
-      count: promises.length,
-    })
+    this.logger.log(
+      { count: promises.length },
+      'Issuing queries to compute numeric buckets',
+    )
     const counts = await Promise.all(promises)
 
     const buckets = [
