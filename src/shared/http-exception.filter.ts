@@ -12,6 +12,7 @@ export class AllExceptionsFilter extends BaseExceptionFilter {
 
   catch(exception: unknown, host: ArgumentsHost): void {
     this.logger.error('Caught exception in AllExceptionsFilter', {
+      err: exception,
       error: serializeError(exception),
     })
     super.catch(exception, host)
