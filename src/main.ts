@@ -9,12 +9,15 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import helmet from '@fastify/helmet'
 import cors from '@fastify/cors'
 import { AppModule } from './app.module'
-import { Logger } from '@nestjs/common'
+import { Logger } from 'nestjs-pino'
 import fastifyStatic from '@fastify/static'
 import { join } from 'path'
 import { ZodValidationPipe } from 'nestjs-zod'
 import { AllExceptionsFilter } from './shared/http-exception.filter'
 import qs from 'qs'
+import { randomUUID } from 'crypto'
+import { IncomingMessage } from 'http'
+import { Http2ServerRequest } from 'http2'
 
 const APP_LISTEN_CONFIG = {
   port: Number(process.env.PORT) || 3000,
@@ -25,6 +28,9 @@ const bootstrap = async () => {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({
+      disableRequestLogging: true,
+      genReqId: (req: IncomingMessage | Http2ServerRequest) =>
+        (req.headers['x-request-id'] as string) || randomUUID(),
       // Ensure bracketed query params like filters[] and filter[field][op] parse correctly
       querystringParser: (str) =>
         qs.parse(str, {
@@ -36,16 +42,12 @@ const bootstrap = async () => {
           allowPrototypes: false,
           ignoreQueryPrefix: true,
         }) as Record<string, unknown>,
-      ...(process.env.LOG_LEVEL
-        ? {
-            logger: { level: process.env.LOG_LEVEL },
-          }
-        : {}),
     }),
     {
       rawBody: true,
     },
   )
+  app.useLogger(app.get(Logger))
   app.setGlobalPrefix('v1')
   app.useGlobalPipes(new ZodValidationPipe())
 
@@ -77,8 +79,8 @@ const bootstrap = async () => {
   return app
 }
 
-bootstrap().then(() => {
-  const logger = new Logger('bootstrap')
+bootstrap().then((app) => {
+  const logger = app.get(Logger)
   logger.log(
     `App bootstrap successful => ${APP_LISTEN_CONFIG.host}:${APP_LISTEN_CONFIG.port}`,
   )
