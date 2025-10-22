@@ -54,9 +54,14 @@ export class PrismaService
     await this.$connect()
 
     this.$on('query', (event: Prisma.QueryEvent) => {
-      this.logger.debug('Query: ' + event.query)
-      this.logger.debug('Parameters: ' + event.params)
-      this.logger.debug('Duration: ' + event.duration + 'ms')
+      this.logger.debug(
+        {
+          query: event.query,
+          params: event.params,
+          durationMs: event.duration,
+        },
+        'Completed SQL query',
+      )
     })
   }
 

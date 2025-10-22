@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { serializeError } from 'src/shared/logging.util'
 import { PrismaService } from '../prisma/prisma.service'
 
 @Injectable()
@@ -22,8 +21,8 @@ export class HealthService {
       await this.prisma.$queryRaw`SELECT 1`
       this.logger.debug('Database health check passed')
       return true
-    } catch (e: unknown) {
-      this.logger.error(`Health check failed => ${serializeError(e)}`)
+    } catch (err) {
+      this.logger.error({ err }, 'Health check failed')
       return false
     }
   }
