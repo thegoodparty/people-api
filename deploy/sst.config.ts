@@ -1,5 +1,11 @@
 ///  <reference types="./.sst/platform/config.d.ts" />
 
+const environment = {
+  develop: 'dev',
+  qa: 'qa',
+  master: 'prod',
+}
+
 export default $config({
   app(input) {
     return {
@@ -13,6 +19,13 @@ export default $config({
         aws: {
           region: 'us-west-2',
           version: '6.67.0',
+          defaultTags: {
+            tags: {
+              Project: 'people-api',
+              // @ts-expect-error input stage is not typed
+              Environment: environment[input.stage],
+            },
+          },
         },
       },
     }
