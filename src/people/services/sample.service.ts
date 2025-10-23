@@ -2,7 +2,6 @@ import { Injectable, BadRequestException } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
 import { SamplePeopleDTO } from '../people.schema'
-import { PerformanceFieldKey } from '../people.types'
 import { DemographicFilter } from '../people.filters'
 import { buildVoterSelect } from '../people.select'
 
@@ -69,13 +68,6 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
         `Unsupported districtType: ${districtType as string}`,
       )
     }
-  }
-
-  private getPerformanceField(electionYear: number): PerformanceFieldKey {
-    const isEvenYear = electionYear % 2 === 0
-    return isEvenYear
-      ? 'VotingPerformanceEvenYearGeneral'
-      : 'VotingPerformanceMinorElection'
   }
 
   private clampSampleSize(size: number): number {
