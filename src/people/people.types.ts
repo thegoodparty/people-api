@@ -45,6 +45,11 @@ export type YearSelectKey =
   | PresidentialPrimaryYearKey
   | AnyElectionYearKey
 
+export type PerformanceFieldKey = Extract<
+  keyof Prisma.VoterWhereInput,
+  'VotingPerformanceEvenYearGeneral' | 'VotingPerformanceMinorElection'
+>
+
 export type PrismaVoterScalarStringKeys = Extract<
   keyof Prisma.VoterWhereInput,
   | 'Homeowner_Probability_Model'
@@ -98,3 +103,15 @@ export interface StatsCategoryMap {
   // Plus dynamic keys for DEMOGRAPHIC_FILTER_FIELDS
   [extra: string]: unknown
 }
+
+export type NumericRange = [number, number]
+
+export type NumericBucketsByField = Partial<
+  Record<
+    | 'ageInt'
+    | 'Age_Int'
+    | 'estimatedIncomeAmountInt'
+    | 'Estimated_Income_Amount_Int',
+    NumericRange[]
+  >
+>
