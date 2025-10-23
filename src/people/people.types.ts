@@ -45,11 +45,6 @@ export type YearSelectKey =
   | PresidentialPrimaryYearKey
   | AnyElectionYearKey
 
-export type PerformanceFieldKey = Extract<
-  keyof Prisma.VoterWhereInput,
-  'VotingPerformanceEvenYearGeneral' | 'VotingPerformanceMinorElection'
->
-
 export type PrismaVoterScalarStringKeys = Extract<
   keyof Prisma.VoterWhereInput,
   | 'Homeowner_Probability_Model'

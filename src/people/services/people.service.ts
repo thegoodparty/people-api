@@ -15,10 +15,18 @@ import {
 } from '../people.filters'
 import { buildVoterSelect } from '../people.select'
 import { BadRequestException, Injectable } from '@nestjs/common'
-import { AllowedFilter, PerformanceFieldKey } from '../people.types'
+import { AllowedFilter } from '../people.types'
 import { FastifyReply } from 'fastify'
 import { format } from '@fast-csv/format'
 import type { RowMap } from '@fast-csv/format'
+
+const filterToVoterStatusMap: Partial<Record<AllowedFilter, string>> = {
+  audienceUnknown: 'Unknown',
+  audienceFirstTimeVoters: 'First Time',
+  audienceLikelyVoters: 'Likely',
+  audienceUnlikelyVoters: 'Unlikely',
+  audienceSuperVoters: 'Super',
+}
 
 @Injectable()
 export class PeopleService extends createPrismaBase(MODELS.Voter) {
@@ -36,13 +44,6 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
         `Unsupported districtType: ${districtType as string}`,
       )
     }
-  }
-
-  private getPerformanceField(electionYear: number): PerformanceFieldKey {
-    const isEvenYear = electionYear % 2 === 0
-    return isEvenYear
-      ? 'VotingPerformanceEvenYearGeneral'
-      : 'VotingPerformanceMinorElection'
   }
 
   private normalizePhone(input: string): string | null {
@@ -194,14 +195,11 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     // Validate districtType against Prisma enum if provided
     this.validateDistrictType(districtType)
 
-    const performanceField = this.getPerformanceField(electionYear)
-
     const where = this.buildWhere({
       state,
       districtType: districtType as keyof Prisma.VoterWhereInput | undefined,
       districtName,
       filters,
-      performanceField,
       demographicFilter: filter as DemographicFilter,
       electionYear,
     })
@@ -253,14 +251,11 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     // Validate districtType against Prisma enum if provided
     this.validateDistrictType(districtType as string | undefined)
 
-    const performanceField = this.getPerformanceField(electionYear)
-
     const where = this.buildWhere({
       state,
       districtType,
       districtName,
       filters,
-      performanceField,
       demographicFilter: filter as DemographicFilter,
       electionYear,
     })
@@ -352,7 +347,6 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     districtType?: keyof Prisma.VoterWhereInput | undefined
     districtName?: string | undefined
     filters: AllowedFilter[]
-    performanceField: PerformanceFieldKey
     demographicFilter: DemographicFilter
     electionYear: number
   }): Prisma.VoterWhereInput {
@@ -361,7 +355,6 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       districtType,
       districtName,
       filters,
-      performanceField,
       demographicFilter,
       electionYear,
     } = options
@@ -522,60 +515,15 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       where.VoterTelephones_LandlineFormatted = { not: null }
     }
 
-    // audience filters
-    const turnoutOr: Prisma.VoterWhereInput[] = []
-    if (filters.includes('audienceSuperVoters')) {
-      turnoutOr.push({
-        [performanceField]: { in: ['High'] },
-      } as Prisma.VoterWhereInput)
-    }
-    if (filters.includes('audienceLikelyVoters')) {
-      turnoutOr.push({
-        [performanceField]: { in: ['Above Average', 'Average'] },
-      } as Prisma.VoterWhereInput)
-    }
-    if (filters.includes('audienceUnreliableVoters')) {
-      turnoutOr.push({
-        [performanceField]: { in: ['Below Average'] },
-      } as Prisma.VoterWhereInput)
-    }
-    if (filters.includes('audienceUnlikelyVoters')) {
-      turnoutOr.push({
-        [performanceField]: { in: ['Low'] },
-      } as Prisma.VoterWhereInput)
-    }
-    if (filters.includes('audienceFirstTimeVoters')) {
-      // Match gp-api: treat no voting performance as first-time
-      turnoutOr.push({
-        OR: [
-          {
-            [performanceField]: { in: ['0%', 'Not Eligible', ''] },
-          } as Prisma.VoterWhereInput,
-          { [performanceField]: null as never } as Prisma.VoterWhereInput,
-        ],
-      })
-    }
-    if (filters.includes('audienceUnknown')) {
-      // Unknown audience means null voting performance
-      turnoutOr.push({
-        [performanceField]: null as never,
-      } as Prisma.VoterWhereInput)
-    }
-    if (filters.includes('audienceRequest')) {
-      // no-op by design
-    }
-    if (filters.includes('registeredVoterUnknown')) {
-      // This is handled through demographic filters in contacts service
-    }
-    if (filters.includes('incomeUnknown')) {
-      // This is handled through demographic filters in contacts service
-    }
-    if (turnoutOr.length) {
+    const voterStatusFilters = filters
+      .map((filter) => filterToVoterStatusMap[filter] || '')
+      .filter(Boolean)
+    if (voterStatusFilters.length) {
       const andClauses: Prisma.VoterWhereInput[] = []
       if (where.AND) {
         andClauses.push(...(Array.isArray(where.AND) ? where.AND : [where.AND]))
       }
-      andClauses.push({ OR: turnoutOr })
+      andClauses.push({ Voter_Status: { in: voterStatusFilters } })
       where.AND = andClauses
     }
 
