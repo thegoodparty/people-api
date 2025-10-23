@@ -252,6 +252,13 @@ export default $config({
         loadBalancer: {
           idleTimeout: 120,
         },
+        target: (targetArgs) => {
+          targetArgs.healthCheck = {
+            ...targetArgs.healthCheck,
+            path: '/v1/health',
+            interval: 30,
+          }
+        },
       },
     })
 
