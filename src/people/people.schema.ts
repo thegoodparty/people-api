@@ -1,11 +1,11 @@
 import { createZodDto } from 'nestjs-zod'
 import { STATE_CODES } from 'src/shared/constants/states'
 import { z } from 'zod'
-import { DEMOGRAPHIC_FILTER_FIELDS } from './people.filters'
 
 const allowedFilters = [
   'audienceSuperVoters',
   'audienceLikelyVoters',
+  // TODO: remove this once gp-api change is deployed.
   'audienceUnreliableVoters',
   'audienceUnlikelyVoters',
   'audienceFirstTimeVoters',
