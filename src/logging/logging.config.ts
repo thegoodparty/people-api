@@ -7,6 +7,7 @@ const RESPONSE_LOGGED_HEADERS = ['content-type', 'content-length']
 
 export const loggingConfig: Params = {
   pinoHttp: {
+    level: process.env.LOG_LEVEL,
     customErrorMessage: () => 'Sending HTTP response',
     customSuccessMessage: () => 'Sending HTTP response',
     customReceivedMessage: () => 'HTTP request received',
