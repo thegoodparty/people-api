@@ -3,7 +3,6 @@ import seedVoters from './voters'
 
 const LIMIT_SEEDS =
   process.env.NODE_ENV === 'production' ||
-  process.env.NODE_ENV === 'qa' ||
   process.env.NODE_ENV === 'development'
 
 const prisma = new PrismaClient()
