@@ -42,6 +42,7 @@ const bootstrap = async () => {
           allowPrototypes: false,
           ignoreQueryPrefix: true,
         }) as Record<string, unknown>,
+      logger: { level: process.env.LOG_LEVEL },
     }),
     {
       rawBody: true,
