@@ -74,7 +74,6 @@ model Voter {
     Residence_Addresses_Zip                String?   @db.Text() // 
     Residence_Addresses_ZipPlus4           String?   @db.Text() // 
     Residence_HHParties_Description        String?   @db.Text() // Same as Mailing HH Parties calculation but based on those sharing the same residence address rather than those sharing the same mailing address
-    Registered_Voter                       Boolean?  @db.Boolean() // anyone from L2 should be set to true, per Kaylee
     SequenceOddEven                        String?   @db.Text() // Voters_SequenceOddEven
     SequenceZigZag                         String?   @db.Text() // Voters_SequenceZigZag
     StateVoterID                           String?   @db.Text() // State-supplied voter ID
@@ -624,7 +623,6 @@ model Voter {
     @@index([Language_Code])
     @@index([Marital_Status])
     @@index([Presence_Of_Children])
-    @@index([Registered_Voter])
     @@index([Veteran_Status])
     @@index([Voter_Status])
     @@index([Voter_Status_UpdatedAt])

@@ -736,9 +736,6 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
     if (filters.includes('audienceRequest')) {
       // no-op by design
     }
-    if (filters.includes('registeredVoterUnknown')) {
-      // This is handled through demographic filters in contacts service
-    }
     if (filters.includes('incomeUnknown')) {
       // This is handled through demographic filters in contacts service
     }
