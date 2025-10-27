@@ -4,11 +4,7 @@ import { voterFactory } from './factories/voter.factory'
 const NUM_VOTERS = 200
 
 export default async function seedVoters(prisma: PrismaClient) {
-  const fakeVoters = new Array(NUM_VOTERS)
-
-  for (let i = 0; i < NUM_VOTERS; i++) {
-    fakeVoters[i] = voterFactory()
-  }
+  const fakeVoters = Array.from({ length: NUM_VOTERS }, () => voterFactory())
 
   const voters = await prisma.voter.createManyAndReturn({ data: fakeVoters })
 
