@@ -18,7 +18,12 @@
     "migrate:dev": "npx prisma migrate dev",
     "migrate:deploy": "npx prisma migrate deploy",
     "migrate:reset": "npx prisma migrate reset --force",
-    "generate": "npx prisma generate"
+    "generate": "npx prisma generate",
+    "seed": "npx prisma db seed"
+  },
+  "prisma": {
+    "seed": "tsx ./seed/seed.ts",
+    "schema": "prisma/schema"
   },
   "dependencies": {
     "@fast-csv/format": "^5.0.5",
@@ -31,6 +36,7 @@
     "@nestjs/platform-fastify": "^11.0.11",
     "@nestjs/swagger": "^11.0.6",
     "@prisma/client": "^6.5.0",
+    "deepmerge-ts": "^7.1.5",
     "dotenv": "^16.4.7",
     "jsonwebtoken": "^9.0.2",
     "lodash": "^4.17.21",
@@ -45,6 +51,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@faker-js/faker": "^9.9.0",
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
@@ -64,6 +71,7 @@
     "prettier": "^3.0.0",
     "prisma": "^6.5.0",
     "ts-node": "^10.9.2",
+    "tsx": "^4.20.6",
     "typescript": "^5.8.2",
     "typescript-eslint": "^8.27.0"
   },

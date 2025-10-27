@@ -70,3 +70,15 @@ Generate the schema:
 ```
 npx prisma generate
 ```
+
+## Seeding
+
+For local development and testing, you can seed the database with fake voter data:
+
+```
+npm run seed
+```
+
+This will generate 100 fake voter records with realistic demographic data, voting history, and district information. The seeding uses the `@faker-js/faker` library to generate realistic data.
+
+See [seed/README.md](seed/README.md) for more details on the seeding pattern and how to extend it.
