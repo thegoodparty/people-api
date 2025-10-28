@@ -614,7 +614,7 @@ model Voter {
     @@index([VoterTelephones_CellPhoneFormatted])
     @@index([VoterTelephones_LandlineFormatted])
     @@index([Mailing_Families_FamilyID])
-    @@index([State])
+    @@index([State, updatedAt])
     @@index([Business_Owner])
     @@index([Education_Of_Person])
     @@index([Estimated_Income_Amount])
