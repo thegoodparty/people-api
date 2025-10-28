@@ -22,7 +22,6 @@ export const DEMOGRAPHIC_FILTER_FIELDS: Record<string, FilterFieldMetadata> = {
   languageCode: { prismaField: 'Language_Code', type: 'string' },
   maritalStatus: { prismaField: 'Marital_Status', type: 'string' },
   presenceOfChildren: { prismaField: 'Presence_Of_Children', type: 'string' },
-  registeredVoter: { prismaField: 'Registered_Voter', type: 'boolean' },
   veteranStatus: { prismaField: 'Veteran_Status', type: 'string' },
   voterStatus: { prismaField: 'Voter_Status', type: 'string' },
   // Ethnic group description

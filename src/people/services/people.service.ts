@@ -147,7 +147,6 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       Residence_Addresses_City: true,
       Residence_Addresses_State: true,
       Residence_Addresses_Zip: true,
-      Registered_Voter: true,
       Parties_Description: true,
     }
 

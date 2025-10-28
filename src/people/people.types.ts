@@ -19,7 +19,6 @@ export type AllowedFilter =
   | 'genderMale'
   | 'genderFemale'
   | 'genderUnknown'
-  | 'registeredVoterUnknown'
   | 'incomeUnknown'
   | 'audienceRequest'
   | 'cellPhoneFormatted'
