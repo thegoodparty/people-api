@@ -2,11 +2,13 @@ import {
   BadRequestException,
   Controller,
   Get,
+  Post,
   NotFoundException,
   Param,
   Query,
   Res,
   Req,
+  Body,
 } from '@nestjs/common'
 import {
   DownloadPeopleDTO,
@@ -61,8 +63,15 @@ export class PeopleController {
     return this.statsService.getStats(dto)
   }
 
+  // keep for backwards compatibility
   @Get('sample')
   samplePeople(@Query() dto: SamplePeopleDTO) {
+    return this.peopleService.samplePeople(dto)
+  }
+
+  // Post to allow large arrays of excludeIds in the body
+  @Post('sample')
+  samplePeoplePost(@Body() dto: SamplePeopleDTO) {
     return this.peopleService.samplePeople(dto)
   }
 
