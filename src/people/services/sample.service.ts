@@ -16,6 +16,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       size = 500,
       full = true,
       hasCellPhone,
+      excludeIds = [],
     } = dto
 
     this.validateDistrictType(districtType as string | undefined)
@@ -33,6 +34,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       districtType as string | undefined,
       districtName,
       hasCellPhone,
+      excludeIds,
     )
 
     const ids = await this.collectSampleIds(target, percents, whereSql)
@@ -83,6 +85,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     districtType?: string,
     districtName?: string,
     hasCellPhone?: boolean,
+    excludeIds?: string[],
   ): Prisma.Sql {
     const whereParts: Prisma.Sql[] = [Prisma.sql`"State" = ${state}`]
     if (districtType && districtName) {
@@ -96,6 +99,13 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       )
     } else if (hasCellPhone === false) {
       whereParts.push(Prisma.sql`"VoterTelephones_CellPhoneFormatted" IS NULL`)
+    }
+    if (excludeIds && excludeIds.length > 0) {
+      whereParts.push(
+        Prisma.sql`"id" NOT IN (${Prisma.join(
+          excludeIds.map((id) => Prisma.sql`${id}::uuid`),
+        )})`,
+      )
     }
     return Prisma.sql`WHERE ${Prisma.join(whereParts, ' AND ')}`
   }
