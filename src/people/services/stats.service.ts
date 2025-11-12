@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, BadRequestException } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
 import {
@@ -109,16 +109,18 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
       'votingPerformanceEvenYearGeneral',
       'votingPerformanceMinorElection',
     ])
-    const tasks: Array<Promise<[string, BucketsResult | BucketsWithRaw]>> = []
+    type NamedTask = () => Promise<[string, BucketsResult | BucketsWithRaw]>
+    const tasks: NamedTask[] = []
 
     const pushTask = (
       name: string,
       fn: () => Promise<BucketsResult | BucketsWithRaw>,
     ) => {
-      tasks.push(
-        fn().then((result) => [name, result]) as Promise<
-          [string, BucketsResult | BucketsWithRaw]
-        >,
+      tasks.push(() =>
+        fn().then(
+          (result) =>
+            [name, result] as [string, BucketsResult | BucketsWithRaw],
+        ),
       )
     }
 
@@ -276,7 +278,7 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
     const results: Array<[string, BucketsResult | BucketsWithRaw]> = []
     for (let i = 0; i < tasks.length; i += concurrency) {
       const batch = tasks.slice(i, i + concurrency)
-      const batchResults = await Promise.all(batch)
+      const batchResults = await Promise.all(batch.map((run) => run()))
       results.push(...batchResults)
     }
     const categoriesOut: StatsCategoryMap = {}
@@ -763,14 +765,14 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
   private validateDemographicFilter(filter: DemographicFilter): string[] {
     const fieldNames = Object.keys(filter)
     if (fieldNames.length > StatsService.MAX_FIELDS) {
-      throw new Error(
+      throw new BadRequestException(
         `Too many fields in filter. Max allowed is ${StatsService.MAX_FIELDS}`,
       )
     }
     for (const apiField of fieldNames) {
       const spec = DEMOGRAPHIC_FILTER_FIELDS[apiField]
       if (!spec) {
-        throw new Error(`Unsupported filter field: ${apiField}`)
+        throw new BadRequestException(`Unsupported filter field: ${apiField}`)
       }
     }
     return fieldNames
@@ -856,19 +858,23 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
         if (s === 'true') coercedValue = true
         else if (s === 'false') coercedValue = false
         else {
-          throw new Error(`Field ${apiField} expects true/false`)
+          throw new BadRequestException(`Field ${apiField} expects true/false`)
         }
       }
       if (typeof coercedValue !== 'boolean') {
-        throw new Error(`Field ${apiField} expects a boolean for eq`)
+        throw new BadRequestException(
+          `Field ${apiField} expects a boolean for eq`,
+        )
       }
       return { [prismaField]: coercedValue as boolean } as never
     } else {
       if (typeof value !== 'string') {
-        throw new Error(`Field ${apiField} expects a string for eq`)
+        throw new BadRequestException(
+          `Field ${apiField} expects a string for eq`,
+        )
       }
       if (value.length > StatsService.API_FIELD_MAX_CHARS) {
-        throw new Error(
+        throw new BadRequestException(
           `Value for ${apiField} exceeds ${StatsService.API_FIELD_MAX_CHARS} characters`,
         )
       }
@@ -887,7 +893,7 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
     const values = Array.isArray(inValue) ? inValue : [inValue]
     if (!values.length) return null
     if (values.length > StatsService.API_FIELD_MAX_VALUES) {
-      throw new Error(
+      throw new BadRequestException(
         `Too many values for ${apiField}. Max allowed is ${StatsService.API_FIELD_MAX_VALUES}`,
       )
     }
@@ -901,9 +907,14 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
           const s = v.toLowerCase()
           if (s === 'true') coerced.push(true)
           else if (s === 'false') coerced.push(false)
-          else throw new Error(`Field ${apiField} only accepts true/false`)
+          else
+            throw new BadRequestException(
+              `Field ${apiField} only accepts true/false`,
+            )
         } else {
-          throw new Error(`Field ${apiField} only accepts boolean values`)
+          throw new BadRequestException(
+            `Field ${apiField} only accepts boolean values`,
+          )
         }
       }
       return { [prismaField]: { in: coerced } } as never
@@ -911,10 +922,12 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
       const perValueClauses: Prisma.VoterWhereInput[] = []
       for (const v of values) {
         if (typeof v !== 'string') {
-          throw new Error(`Field ${apiField} only accepts string values`)
+          throw new BadRequestException(
+            `Field ${apiField} only accepts string values`,
+          )
         }
         if (v.length > StatsService.API_FIELD_MAX_CHARS) {
-          throw new Error(
+          throw new BadRequestException(
             `Value for ${apiField} exceeds ${StatsService.API_FIELD_MAX_CHARS} characters`,
           )
         }
