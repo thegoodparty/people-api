@@ -14,6 +14,7 @@ import fastifyStatic from '@fastify/static'
 import { join } from 'path'
 import { ZodValidationPipe } from 'nestjs-zod'
 import { AllExceptionsFilter } from './shared/http-exception.filter'
+import { PrismaExceptionFilter } from './shared/prisma-exception.filter'
 import qs from 'qs'
 import { randomUUID } from 'crypto'
 import { IncomingMessage } from 'http'
@@ -53,7 +54,10 @@ const bootstrap = async () => {
   app.useGlobalPipes(new ZodValidationPipe())
 
   const httpAdapterHost = app.get(HttpAdapterHost)
-  app.useGlobalFilters(new AllExceptionsFilter(httpAdapterHost))
+  app.useGlobalFilters(
+    new PrismaExceptionFilter(),
+    new AllExceptionsFilter(httpAdapterHost),
+  )
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('API Documentation')
