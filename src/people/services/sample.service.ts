@@ -27,7 +27,6 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       {} as DemographicFilter,
     )
 
-    const target = this.clampSampleSize(size)
     const percents = this.getSamplingPercents()
     const whereSql = this.buildSampleWhereSql(
       state,
@@ -37,17 +36,17 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       excludeIds,
     )
 
-    const ids = await this.collectSampleIds(target, percents, whereSql)
+    const ids = await this.collectSampleIds(size, percents, whereSql)
 
-    if (ids.size < target) {
-      const remaining = target - ids.size
+    if (ids.size < size) {
+      const remaining = size - ids.size
       const extraIds = await this.collectRandomIds(
         remaining,
         whereSql,
         Array.from(ids),
       )
       for (const id of extraIds) {
-        if (ids.size >= target) break
+        if (ids.size >= size) break
         ids.add(id)
       }
     }
@@ -70,10 +69,6 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
         `Unsupported districtType: ${districtType as string}`,
       )
     }
-  }
-
-  private clampSampleSize(size: number): number {
-    return Math.max(1, Math.min(size, 5000))
   }
 
   private getSamplingPercents(): number[] {
