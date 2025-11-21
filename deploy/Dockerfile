@@ -78,6 +78,7 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 COPY module-alias.js ./
+COPY newrelic.js ./
 
 # Copy the entrypoint script and ensure it's executable
 COPY deploy/entrypoint.sh /app/entrypoint.sh
@@ -85,6 +86,7 @@ RUN chmod +x /app/entrypoint.sh
 
 # Set the NODE_ENV to production
 ENV NODE_ENV=production
+ENV NODE_OPTIONS="-r newrelic"
 
 # Use the entrypoint script as the container's entrypoint
 ENTRYPOINT [ "/app/entrypoint.sh" ]
