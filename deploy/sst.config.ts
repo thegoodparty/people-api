@@ -162,92 +162,11 @@ export default $config({
       clusterExists = true
     } catch {}
 
-    // Derive parameter group family from current engine version (fallback to aurora-postgresql15)
-    let family = 'aurora-postgresql15'
-    let engineInfo: Awaited<ReturnType<typeof aws.rds.getCluster>> | undefined
     if (clusterExists) {
-      engineInfo = await aws.rds.getCluster({ clusterIdentifier })
-      try {
-        const engineVersion = await aws.rds.getEngineVersion({
-          engine: engineInfo.engine!,
-          version: engineInfo.engineVersion!,
-        })
-        family = engineVersion.parameterGroupFamily
-      } catch {}
-    }
-
-    // Cluster Parameter Group (shared_preload_libraries)
-    const clusterPg = new aws.rds.ClusterParameterGroup(
-      `people-db-cpg-${$app.stage}`,
-      {
-        family,
-        description: `People API CPG (${family})`,
-        parameters: [
-          {
-            name: 'shared_preload_libraries',
-            value: 'pg_stat_statements,auto_explain',
-          },
-        ],
-      },
-    )
-
-    // Instance Parameter Group (pg_stat_statements, auto_explain, io timing, slow logging)
-    const instancePg = new aws.rds.ParameterGroup(
-      `people-db-ipg-${$app.stage}`,
-      {
-        family,
-        description: `People API IPG (${family})`,
-        parameters: [
-          { name: 'pg_stat_statements.track', value: 'all' },
-          { name: 'pg_stat_statements.max', value: '10000' },
-          { name: 'pg_stat_statements.save', value: '1' },
-          { name: 'pg_stat_statements.track_utility', value: '0' },
-          { name: 'track_io_timing', value: '1' },
-          { name: 'auto_explain.log_min_duration', value: '500ms' },
-          { name: 'auto_explain.log_analyze', value: '1' },
-          { name: 'auto_explain.log_timing', value: '1' },
-          { name: 'auto_explain.log_buffers', value: '0' },
-          { name: 'auto_explain.log_verbose', value: '0' },
-          { name: 'auto_explain.log_triggers', value: '0' },
-          { name: 'log_min_duration_statement', value: '500ms' },
-        ],
-      },
-    )
-
-    if (clusterExists && engineInfo) {
-      peopleDbCluster = new aws.rds.Cluster(
+      peopleDbCluster = aws.rds.Cluster.get(
         `people-db-cluster-${$app.stage}`,
-        {
-          clusterIdentifier,
-          engine: engineInfo.engine,
-          engineMode: engineInfo.engineMode,
-          engineVersion: engineInfo.engineVersion,
-          dbSubnetGroupName: dbSubnetGroup.name,
-          vpcSecurityGroupIds: [rdsSecurityGroup.id],
-          enabledCloudwatchLogsExports: ['postgresql'],
-          dbClusterParameterGroupName: clusterPg.name,
-          applyImmediately: true,
-        },
-        { import: clusterIdentifier },
+        clusterIdentifier,
       )
-
-      const memberIds = engineInfo.clusterMembers ?? []
-      for (const id of memberIds) {
-        const info = await aws.rds.getInstance({ dbInstanceIdentifier: id })
-        new aws.rds.ClusterInstance(
-          `people-db-instance-${$app.stage}-${id}`,
-          {
-            clusterIdentifier: peopleDbCluster.id,
-            engine: 'aurora-postgresql',
-            instanceClass: info.dbInstanceClass,
-            publiclyAccessible: info.publiclyAccessible,
-            dbSubnetGroupName: dbSubnetGroup.name,
-            dbParameterGroupName: instancePg.name,
-            applyImmediately: true,
-          },
-          { import: id },
-        )
-      }
     } else {
       peopleDbCluster = new aws.rds.Cluster(`people-db-cluster-${$app.stage}`, {
         clusterIdentifier,
@@ -263,8 +182,6 @@ export default $config({
         storageEncrypted: true,
         skipFinalSnapshot: isDevelop ? true : undefined,
         databaseInsightsMode: 'advanced',
-        enabledCloudwatchLogsExports: ['postgresql'],
-        dbClusterParameterGroupName: clusterPg.name,
       })
       const instanceCount = isProd ? 2 : 1
       for (let i = 0; i < instanceCount; i++) {
@@ -276,8 +193,6 @@ export default $config({
             instanceClass: isProd ? 'db.r6g.4xlarge' : 'db.t4g.medium',
             publiclyAccessible: false,
             dbSubnetGroupName: dbSubnetGroup.name,
-            dbParameterGroupName: instancePg.name,
-            applyImmediately: true,
           },
         )
       }
