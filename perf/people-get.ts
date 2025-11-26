@@ -1,5 +1,5 @@
 import http from 'k6/http'
-import { buildUrl, recordColdFirstHit } from './common.js'
+import { buildUrl, recordColdFirstHit } from './common'
 
 export const options = {
   scenarios: {

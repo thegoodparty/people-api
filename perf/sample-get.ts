@@ -1,5 +1,5 @@
 import http from 'k6/http'
-import { buildUrl, recordColdFirstHit } from './common.js'
+import { buildUrl, recordColdFirstHit } from './common'
 
 export const options = {
   scenarios: {
@@ -9,20 +9,22 @@ export const options = {
 }
 
 export function small() {
-  const url = buildUrl('/people/stats', {
-    state: 'WI',
+  const url = buildUrl('/people/sample', {
+    state: 'FL',
     districtType: 'City',
-    districtName: 'ONALASKA CITY',
+    districtName: 'NICEVILLE CITY (EST.)',
+    size: 1000,
   })
   const res = http.get(url)
   recordColdFirstHit(res)
 }
 
 export function large() {
-  const url = buildUrl('/people/stats', {
-    state: 'WI',
+  const url = buildUrl('/people/sample', {
+    state: 'FL',
     districtType: 'City',
-    districtName: 'MILWAUKEE CITY',
+    districtName: 'JACKSONVILLE CITY (EST.)',
+    size: 1000,
   })
   const res = http.get(url)
   recordColdFirstHit(res)
