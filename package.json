@@ -21,7 +21,8 @@
     "migrate:reset": "node ./scripts/disallow-perf-local.js && npx prisma migrate reset --force",
     "generate": "npx prisma generate",
     "seed": "npx prisma db seed",
-    "perf:all": "sh -c '\n      k6 run --summary-trend-stats \"avg,med,p(85),p(95),p(99),min,max\" --env ONLY=small perf/people-get.ts || true;\n      k6 run --summary-trend-stats \"avg,med,p(85),p(95),p(99),min,max\" --env ONLY=large perf/people-get.ts || true;\n      k6 run --summary-trend-stats \"avg,med,p(85),p(95),p(99),min,max\" --env ONLY=small perf/stats-get.ts || true;\n      k6 run --summary-trend-stats \"avg,med,p(85),p(95),p(99),min,max\" --env ONLY=large perf/stats-get.ts || true;\n      k6 run --summary-trend-stats \"avg,med,p(85),p(95),p(99),min,max\" --env ONLY=small perf/sample-get.ts || true;\n      k6 run --summary-trend-stats \"avg,med,p(85),p(95),p(99),min,max\" --env ONLY=large perf/sample-get.ts || true\n    '"
+    "perf:all": "sh -c '\n      k6 run --summary-trend-stats \"avg,med,p(50),p(95),p(99),min,max\" --env ONLY=small perf/people-get.ts || true;\n      k6 run --summary-trend-stats \"avg,med,p(50),p(95),p(99),min,max\" --env ONLY=large perf/people-get.ts || true;\n      k6 run --summary-trend-stats \"avg,med,p(50),p(95),p(99),min,max\" --env ONLY=small perf/stats-get.ts || true;\n      k6 run --summary-trend-stats \"avg,med,p(50),p(95),p(99),min,max\" --env ONLY=large perf/stats-get.ts || true;\n      k6 run --summary-trend-stats \"avg,med,p(50),p(95),p(99),min,max\" --env ONLY=small perf/sample-get.ts || true;\n      k6 run --summary-trend-stats \"avg,med,p(50),p(95),p(99),min,max\" --env ONLY=large perf/sample-get.ts || true\n    '",
+    "perf:mixed": "k6 run --summary-trend-stats \"avg,med,p(50),p(95),p(99),min,max\" perf/mixed.ts"
   },
   "prisma": {
     "seed": "tsx ./seed/seed.ts",
