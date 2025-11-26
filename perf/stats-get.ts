@@ -1,12 +1,24 @@
 import http from 'k6/http'
-import { buildUrl, recordColdFirstHit } from './common'
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { buildUrl, recordMetrics, buildHeaders } = require('./common.js')
 
-export const options = {
-  scenarios: {
-    small: { executor: 'constant-vus', vus: 3, duration: '30s', exec: 'small' },
-    large: { executor: 'constant-vus', vus: 3, duration: '30s', exec: 'large' },
+const baseScenarios = {
+  small: { executor: 'constant-vus', vus: 3, duration: '30s', exec: 'small' },
+  large: {
+    executor: 'constant-vus',
+    vus: 3,
+    duration: '30s',
+    startTime: '35s',
+    exec: 'large',
   },
-}
+} as const
+
+export const options =
+  (__ENV && __ENV.ONLY) === 'small'
+    ? { scenarios: { small: baseScenarios.small } }
+    : (__ENV && __ENV.ONLY) === 'large'
+      ? { scenarios: { large: baseScenarios.large } }
+      : { scenarios: baseScenarios }
 
 export function small() {
   const url = buildUrl('/people/stats', {
@@ -14,8 +26,8 @@ export function small() {
     districtType: 'City',
     districtName: 'ONALASKA CITY',
   })
-  const res = http.get(url)
-  recordColdFirstHit(res)
+  const res = http.get(url, { headers: buildHeaders('perf:stats small') })
+  recordMetrics(res)
 }
 
 export function large() {
@@ -24,6 +36,6 @@ export function large() {
     districtType: 'City',
     districtName: 'MILWAUKEE CITY',
   })
-  const res = http.get(url)
-  recordColdFirstHit(res)
+  const res = http.get(url, { headers: buildHeaders('perf:stats large') })
+  recordMetrics(res)
 }

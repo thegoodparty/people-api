@@ -24,7 +24,7 @@ module.exports = {
     node: true,
     jest: true,
   },
-  ignorePatterns: ['.eslintrc.js'],
+  ignorePatterns: ['.eslintrc.js', 'perf/**/*.js', 'perf/**/*.ts'],
   rules: {
     semi: 'off',
     '@typescript-eslint/no-namespace': 'off',
