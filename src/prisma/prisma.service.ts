@@ -48,6 +48,39 @@ export class PrismaService
         },
       },
     })
+
+    if (process.env.NODE_ENV === 'perf-local') {
+      const extension = Prisma.defineExtension({
+        name: 'perfLocalWriteBlocker',
+        query: {
+          $allModels: {
+            $allOperations({ operation, args, query }) {
+              const blocked = new Set([
+                'create',
+                'createMany',
+                'update',
+                'updateMany',
+                'upsert',
+                'delete',
+                'deleteMany',
+                '$executeRaw',
+                '$executeRawUnsafe',
+              ])
+              return blocked.has(operation)
+                ? Promise.reject(new Error('Writes are disabled in perf-local'))
+                : query(args)
+            },
+          },
+        },
+      })
+      const extended = this.$extends(extension)
+      Object.setPrototypeOf(this, Object.getPrototypeOf(extended))
+      for (const key of Object.getOwnPropertyNames(extended)) {
+        const selfObj = this as unknown as Record<string, unknown>
+        const extObj = extended as unknown as Record<string, unknown>
+        selfObj[key] = extObj[key]
+      }
+    }
   }
 
   async onModuleInit() {

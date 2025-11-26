@@ -1,2 +1,2 @@
 import { config } from 'dotenv'
-config()
+process.env.ENV_PATH ? config({ path: process.env.ENV_PATH }) : config()
