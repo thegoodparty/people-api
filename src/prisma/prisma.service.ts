@@ -51,6 +51,25 @@ export class PrismaService
   }
 
   async onModuleInit() {
+    if (process.env.NODE_ENV === 'perf-local') {
+      this.$use(async (params, next) => {
+        const blocked = [
+          'create',
+          'createMany',
+          'update',
+          'updateMany',
+          'upsert',
+          'delete',
+          'deleteMany',
+          '$executeRaw',
+          '$executeRawUnsafe',
+        ]
+        if (blocked.includes(params.action)) {
+          throw new Error('Writes are disabled in perf-local')
+        }
+        return next(params)
+      })
+    }
     await this.$connect()
 
     this.$on('query', (event: Prisma.QueryEvent) => {
