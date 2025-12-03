@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client'
+import { Prisma, USState } from '@prisma/client'
 import {
   DownloadPeopleDTO,
   ListPeopleDTO,
@@ -19,6 +19,7 @@ import { AllowedFilter } from '../people.types'
 import { FastifyReply } from 'fastify'
 import { format } from '@fast-csv/format'
 import type { RowMap } from '@fast-csv/format'
+import { DistrictService } from 'src/district/services/district.service'
 
 const filterToVoterStatusMap: Partial<Record<AllowedFilter, string>> = {
   audienceUnknown: 'Unknown',
@@ -30,6 +31,12 @@ const filterToVoterStatusMap: Partial<Record<AllowedFilter, string>> = {
 
 @Injectable()
 export class PeopleService extends createPrismaBase(MODELS.Voter) {
+  constructor(
+    private readonly sampleService: SampleService,
+    private readonly districtService: DistrictService,
+  ) {
+    super()
+  }
   private static readonly MAX_FIELDS = 15
   private static readonly API_FIELD_MAX_CHARS = 100
   private static readonly API_FIELD_MAX_VALUES = 50
@@ -73,8 +80,12 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     const districtId =
       state && districtType && districtName
         ? (
-            await this.client.district.findFirst({
-              where: { type: districtType, name: districtName, state },
+            await this.districtService.findFirst({
+              where: {
+                type: districtType,
+                name: districtName,
+                state: state as USState,
+              },
               select: { id: true },
             })
           )?.id
@@ -201,8 +212,12 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     const resolvedDistrictId =
       state && districtType && districtName
         ? (
-            await this.client.district.findFirst({
-              where: { type: districtType, name: districtName, state },
+            await this.districtService.findFirst({
+              where: {
+                type: districtType,
+                name: districtName,
+                state: state as USState,
+              },
               select: { id: true },
             })
           )?.id
@@ -266,8 +281,12 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     const resolvedDistrictId =
       state && districtType && districtName
         ? (
-            await this.client.district.findFirst({
-              where: { type: districtType, name: districtName, state },
+            await this.districtService.findFirst({
+              where: {
+                type: districtType,
+                name: districtName,
+                state: state as USState,
+              },
               select: { id: true },
             })
           )?.id
@@ -346,10 +365,6 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       res.raw.off('close', onClose)
       csvStream.end()
     }
-  }
-
-  constructor(private readonly sampleService: SampleService) {
-    super()
   }
 
   async samplePeople(dto: SamplePeopleDTO) {

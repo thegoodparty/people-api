@@ -1,12 +1,16 @@
 import { Injectable, BadRequestException } from '@nestjs/common'
-import { Prisma } from '@prisma/client'
+import { Prisma, USState } from '@prisma/client'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
 import { SamplePeopleDTO } from '../people.schema'
 import { DemographicFilter } from '../people.filters'
 import { buildVoterSelect } from '../people.select'
+import { DistrictService } from 'src/district/services/district.service'
 
 @Injectable()
 export class SampleService extends createPrismaBase(MODELS.Voter) {
+  constructor(private readonly districtService: DistrictService) {
+    super()
+  }
   async samplePeople(dto: SamplePeopleDTO) {
     const {
       state,
@@ -31,11 +35,11 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     const resolvedDistrictId =
       state && districtType && districtName
         ? (
-            await this.client.district.findFirst({
+            await this.districtService.findFirst({
               where: {
                 type: districtType as string,
                 name: districtName,
-                state,
+                state: state as USState,
               },
               select: { id: true },
             })

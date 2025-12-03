@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common'
-import { Prisma } from '@prisma/client'
+import { Prisma, USState } from '@prisma/client'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
 import {
   DEMOGRAPHIC_FILTER_FIELDS,
@@ -27,9 +27,13 @@ import type {
   StatsCategoryMap,
   PerformanceFieldKey,
 } from '../people.types'
+import { DistrictService } from 'src/district/services/district.service'
 
 @Injectable()
 export class StatsService extends createPrismaBase(MODELS.Voter) {
+  constructor(private readonly districtService: DistrictService) {
+    super()
+  }
   private static readonly MAX_FIELDS = 15
   private static readonly API_FIELD_MAX_CHARS = 100
   private static readonly API_FIELD_MAX_VALUES = 50
@@ -93,8 +97,12 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
     const resolvedDistrictId =
       state && districtType && districtName
         ? (
-            await this.client.district.findFirst({
-              where: { type: districtType, name: districtName, state },
+            await this.districtService.findFirst({
+              where: {
+                type: districtType,
+                name: districtName,
+                state: state as USState,
+              },
               select: { id: true },
             })
           )?.id
