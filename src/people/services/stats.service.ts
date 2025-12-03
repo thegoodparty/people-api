@@ -90,10 +90,19 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
 
     const performanceField = this.getPerformanceField(electionYear)
 
+    const resolvedDistrictId =
+      state && districtType && districtName
+        ? (
+            await this.client.district.findFirst({
+              where: { type: districtType, name: districtName, state },
+              select: { id: true },
+            })
+          )?.id
+        : undefined
+
     const where = this.buildWhere({
       state,
-      districtType: districtType as keyof Prisma.VoterWhereInput | undefined,
-      districtName,
+      districtId: resolvedDistrictId,
       filters,
       performanceField,
       demographicFilter: filter as DemographicFilter,
@@ -535,8 +544,7 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
 
   private buildWhere(options: {
     state: string
-    districtType?: keyof Prisma.VoterWhereInput | undefined
-    districtName?: string | undefined
+    districtId?: string | undefined
     filters: AllowedFilter[]
     performanceField: PerformanceFieldKey
     demographicFilter: DemographicFilter
@@ -544,8 +552,7 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
   }): Prisma.VoterWhereInput {
     const {
       state,
-      districtType,
-      districtName,
+      districtId,
       filters,
       performanceField,
       demographicFilter,
@@ -553,10 +560,13 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
     } = options
     const where: Prisma.VoterWhereInput = { State: state }
 
-    if (districtType && districtName) {
-      ;(where as Record<string, unknown>)[districtType] = {
-        equals: districtName,
+    if (districtId) {
+      const andClauses: Prisma.VoterWhereInput[] = []
+      if (where.AND) {
+        andClauses.push(...(Array.isArray(where.AND) ? where.AND : [where.AND]))
       }
+      andClauses.push({ DistrictLinks: { some: { districtId } } })
+      where.AND = andClauses
     }
 
     // genders

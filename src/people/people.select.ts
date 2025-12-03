@@ -41,12 +41,6 @@ export function buildVoterSelect(
       Age: true,
       Gender: true,
       Parties_Description: true,
-      US_Congressional_District: true,
-      State_Senate_District: true,
-      State_House_District: true,
-      County: true,
-      City: true,
-      Precinct: true,
     }
 
     if (isEvenYear) {

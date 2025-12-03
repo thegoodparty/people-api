@@ -36,14 +36,6 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
 
   private validateDistrictType(districtType?: string): void {
     if (!districtType) return
-    const isValidField = Object.values(Prisma.VoterScalarFieldEnum).includes(
-      districtType as Prisma.VoterScalarFieldEnum,
-    )
-    if (!isValidField) {
-      throw new BadRequestException(
-        `Unsupported districtType: ${districtType as string}`,
-      )
-    }
   }
 
   private normalizePhone(input: string): string | null {
@@ -78,6 +70,15 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     const where: Prisma.VoterWhereInput = {}
 
     if (state) where.State = state
+    const districtId =
+      state && districtType && districtName
+        ? (
+            await this.client.district.findFirst({
+              where: { type: districtType, name: districtName, state },
+              select: { id: true },
+            })
+          )?.id
+        : undefined
 
     const tokens = (name || '').trim().split(/\s+/).filter(Boolean)
     const hasNameTokens = tokens.length > 0 || firstName || lastName
@@ -125,10 +126,13 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       }
     }
 
-    if (districtType && districtName) {
-      ;(where as Record<string, unknown>)[districtType as string] = {
-        equals: districtName,
+    if (districtId) {
+      const andClauses: Prisma.VoterWhereInput[] = []
+      if (where.AND) {
+        andClauses.push(...(Array.isArray(where.AND) ? where.AND : [where.AND]))
       }
+      andClauses.push({ DistrictLinks: { some: { districtId } } })
+      where.AND = andClauses
     }
 
     const take = resultsPerPage
@@ -194,10 +198,19 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     // Validate districtType against Prisma enum if provided
     this.validateDistrictType(districtType)
 
+    const resolvedDistrictId =
+      state && districtType && districtName
+        ? (
+            await this.client.district.findFirst({
+              where: { type: districtType, name: districtName, state },
+              select: { id: true },
+            })
+          )?.id
+        : undefined
+
     const where = this.buildWhere({
       state,
-      districtType: districtType as keyof Prisma.VoterWhereInput | undefined,
-      districtName,
+      districtId: resolvedDistrictId,
       filters,
       demographicFilter: filter as DemographicFilter,
       electionYear,
@@ -250,10 +263,19 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     // Validate districtType against Prisma enum if provided
     this.validateDistrictType(districtType as string | undefined)
 
+    const resolvedDistrictId =
+      state && districtType && districtName
+        ? (
+            await this.client.district.findFirst({
+              where: { type: districtType, name: districtName, state },
+              select: { id: true },
+            })
+          )?.id
+        : undefined
+
     const where = this.buildWhere({
       state,
-      districtType,
-      districtName,
+      districtId: resolvedDistrictId,
       filters,
       demographicFilter: filter as DemographicFilter,
       electionYear,
@@ -343,27 +365,22 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
 
   private buildWhere(options: {
     state: string
-    districtType?: keyof Prisma.VoterWhereInput | undefined
-    districtName?: string | undefined
+    districtId?: string | undefined
     filters: AllowedFilter[]
     demographicFilter: DemographicFilter
     electionYear: number
   }): Prisma.VoterWhereInput {
-    const {
-      state,
-      districtType,
-      districtName,
-      filters,
-      demographicFilter,
-      electionYear,
-    } = options
+    const { state, districtId, filters, demographicFilter, electionYear } =
+      options
     const where: Prisma.VoterWhereInput = { State: state }
 
-    if (districtType && districtName) {
-      // This cast allows us to avoid making a code change every time a new district type is introduced
-      ;(where as Record<string, unknown>)[districtType] = {
-        equals: districtName,
+    if (districtId) {
+      const andClauses: Prisma.VoterWhereInput[] = []
+      if (where.AND) {
+        andClauses.push(...(Array.isArray(where.AND) ? where.AND : [where.AND]))
       }
+      andClauses.push({ DistrictLinks: { some: { districtId } } })
+      where.AND = andClauses
     }
 
     // genders

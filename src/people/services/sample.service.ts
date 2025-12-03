@@ -28,10 +28,22 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     )
 
     const percents = this.getSamplingPercents()
+    const resolvedDistrictId =
+      state && districtType && districtName
+        ? (
+            await this.client.district.findFirst({
+              where: {
+                type: districtType as string,
+                name: districtName,
+                state,
+              },
+              select: { id: true },
+            })
+          )?.id
+        : undefined
     const whereSql = this.buildSampleWhereSql(
       state,
-      districtType as string | undefined,
-      districtName,
+      resolvedDistrictId,
       hasCellPhone,
       excludeIds,
     )
@@ -77,15 +89,19 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
 
   private buildSampleWhereSql(
     state: string,
-    districtType?: string,
-    districtName?: string,
+    districtId?: string,
     hasCellPhone?: boolean,
     excludeIds?: string[],
   ): Prisma.Sql {
     const whereParts: Prisma.Sql[] = [Prisma.sql`"State" = ${state}`]
-    if (districtType && districtName) {
+    if (districtId) {
       whereParts.push(
-        Prisma.sql`"${Prisma.raw(districtType)}" = ${districtName}`,
+        Prisma.sql`EXISTS (
+          SELECT 1
+          FROM "DistrictVoter" dv
+          WHERE dv."voter_id" = "Voter"."id"
+            AND dv."district_id" = ${districtId}
+        )`,
       )
     }
     if (hasCellPhone === true) {
