@@ -23,6 +23,14 @@ if (!process.env.NEW_RELIC_APP_NAME || !process.env.NEW_RELIC_LICENSE_KEY) {
       enabled: true,
       ignore_status_codes: [401],
     },
+    transaction_tracer: {
+      enabled: true,
+      record_sql: 'raw',
+      explain_threshold: 200 // ms
+    },
+    slow_sql: {
+      enabled: true
+    },
     allow_all_headers: true,
     attributes: {
       exclude: [
