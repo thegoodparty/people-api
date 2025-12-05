@@ -41,10 +41,6 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
   private static readonly API_FIELD_MAX_CHARS = 100
   private static readonly API_FIELD_MAX_VALUES = 50
 
-  private validateDistrictType(districtType?: string): void {
-    if (!districtType) return
-  }
-
   private normalizePhone(input: string): string | null {
     const digits = (input || '').replace(/\D/g, '')
     if (digits.length === 11 && digits.startsWith('1')) return digits.slice(1)
@@ -71,8 +67,6 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       resultsPerPage,
       page,
     } = dto
-
-    this.validateDistrictType(districtType)
 
     const where: Prisma.VoterWhereInput = {}
 
@@ -206,9 +200,6 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     } = dto
     const model = this.model
 
-    // Validate districtType against Prisma enum if provided
-    this.validateDistrictType(districtType)
-
     const resolvedDistrictId =
       state && districtType && districtName
         ? (
@@ -274,9 +265,6 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       | keyof Prisma.VoterWhereInput
       | undefined
     const districtName = dto.districtName ?? dto.electionType
-
-    // Validate districtType against Prisma enum if provided
-    this.validateDistrictType(districtType as string | undefined)
 
     const resolvedDistrictId =
       state && districtType && districtName
