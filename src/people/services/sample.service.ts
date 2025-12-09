@@ -76,15 +76,16 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
   }
 
   private validateDistrictType(districtType?: string): void {
-    if (!districtType) return
-    const isValidField = Object.values(Prisma.VoterScalarFieldEnum).includes(
-      districtType as Prisma.VoterScalarFieldEnum,
-    )
-    if (!isValidField) {
-      throw new BadRequestException(
-        `Unsupported districtType: ${districtType as string}`,
-      )
-    }
+    return // No op
+    // if (!districtType) return
+    // const isValidField = Object.values(Prisma.VoterScalarFieldEnum).includes(
+    //   districtType as Prisma.VoterScalarFieldEnum,
+    // )
+    // if (!isValidField) {
+    //   throw new BadRequestException(
+    //     `Unsupported districtType: ${districtType as string}`,
+    //   )
+    // }
   }
 
   private getSamplingPercents(): number[] {
@@ -105,7 +106,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
           FROM "DistrictVoter" dv
           WHERE dv."voter_id" = "Voter"."id"
             AND dv."district_id" = ${districtId}
-            AND dv."state" = ${state}
+            AND dv."State" = ${state}
         )`,
       )
     }

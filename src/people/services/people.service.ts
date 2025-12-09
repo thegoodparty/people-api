@@ -136,7 +136,9 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       if (where.AND) {
         andClauses.push(...(Array.isArray(where.AND) ? where.AND : [where.AND]))
       }
-      andClauses.push({ DistrictLinks: { some: { districtId } } })
+      andClauses.push({
+        DistrictLinks: { some: { districtId, state: state as USState } },
+      })
       where.AND = andClauses
     }
 
@@ -382,7 +384,9 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       if (where.AND) {
         andClauses.push(...(Array.isArray(where.AND) ? where.AND : [where.AND]))
       }
-      andClauses.push({ DistrictLinks: { some: { districtId } } })
+      andClauses.push({
+        DistrictLinks: { some: { districtId, state: state as USState } },
+      })
       where.AND = andClauses
     }
 
