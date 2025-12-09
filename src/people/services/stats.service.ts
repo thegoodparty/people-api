@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common'
-import { Prisma, USState } from '@prisma/client'
+import { Prisma, USState, $Enums } from '@prisma/client'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
 import {
   DEMOGRAPHIC_FILTER_FIELDS,
@@ -101,7 +101,7 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
               where: {
                 type: districtType,
                 name: districtName,
-                state: state as USState,
+                state: state as $Enums.DistrictUSState,
               },
               select: { id: true },
             })
@@ -566,14 +566,14 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
       demographicFilter,
       electionYear,
     } = options
-    const where: Prisma.VoterWhereInput = { State: state }
+    const where: Prisma.VoterWhereInput = { State: state as USState }
 
     if (districtId) {
       const andClauses: Prisma.VoterWhereInput[] = []
       if (where.AND) {
         andClauses.push(...(Array.isArray(where.AND) ? where.AND : [where.AND]))
       }
-      andClauses.push({ DistrictLinks: { some: { districtId } } })
+      andClauses.push({ DistrictLinks: { some: { districtId, state: state as USState } } })
       where.AND = andClauses
     }
 

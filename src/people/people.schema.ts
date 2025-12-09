@@ -1,5 +1,5 @@
 import { createZodDto } from 'nestjs-zod'
-import { STATE_CODES } from 'src/shared/constants/states'
+import { USState } from '@prisma/client'
 import { z } from 'zod'
 import { DEMOGRAPHIC_FILTER_FIELDS } from './people.filters'
 
@@ -48,10 +48,10 @@ const coerceArray = (v: unknown): unknown[] => {
 }
 
 // ---- Shared atoms to keep schemas DRY ----
-const stateSchema = z
-  .string()
-  .transform((v) => v.toUpperCase())
-  .refine((v) => STATE_CODES.includes(v), 'Invalid state code')
+const stateSchema = z.preprocess(
+  (v) => (typeof v === 'string' ? v.toUpperCase() : v),
+  z.nativeEnum(USState),
+)
 
 const electionYearSchema = z
   .preprocess(
@@ -158,7 +158,7 @@ export class DownloadPeopleDTO extends createZodDto(downloadPeopleSchema) {}
 
 export const searchPeopleSchema = z
   .object({
-    state: stateSchema.optional(),
+    state: stateSchema,
     districtType: z.string().optional(),
     districtName: z.string().optional(),
     phone: z.string().optional(),

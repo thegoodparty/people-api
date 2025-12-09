@@ -155,4 +155,5 @@ model Voter {
     @@index([VotingPerformanceEvenYearPrimary])
     @@index([VotingPerformanceEvenYearGeneralAndPrimary])
     @@index([VotingPerformanceMinorElection])
+    @@schema("green")
 }

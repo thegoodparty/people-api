@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common'
-import { Prisma, USState } from '@prisma/client'
+import { Prisma, USState, $Enums } from '@prisma/client'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
 import { SamplePeopleDTO } from '../people.schema'
 import { DemographicFilter } from '../people.filters'
@@ -39,7 +39,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
               where: {
                 type: districtType as string,
                 name: districtName,
-                state: state as USState,
+                state: state as $Enums.DistrictUSState,
               },
               select: { id: true },
             })
@@ -105,6 +105,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
           FROM "DistrictVoter" dv
           WHERE dv."voter_id" = "Voter"."id"
             AND dv."district_id" = ${districtId}
+            AND dv."state" = ${state}
         )`,
       )
     }
@@ -168,18 +169,36 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     whereSql: Prisma.Sql,
     excludeIds: string[],
   ): Promise<string[]> {
-    const whereWithExclusion = excludeIds.length
-      ? Prisma.sql`${whereSql} AND "id" NOT IN (${Prisma.join(
-          excludeIds.map((id) => Prisma.sql`${id}::uuid`),
-        )})`
-      : whereSql
-    const rows = await this.client.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-      SELECT "id"
-      FROM "Voter"
-      ${whereWithExclusion}
-      ORDER BY random()
-      LIMIT ${remaining}
-    `)
-    return rows.map((r) => r.id)
+    const picked = new Set<string>()
+    let percent = 0.1
+    let attempt = 0
+    const maxPercent = 20
+    while (picked.size < remaining && percent <= maxPercent) {
+      const exclude = excludeIds.concat(Array.from(picked))
+      const whereWithExclusion =
+        exclude.length > 0
+          ? Prisma.sql`${whereSql} AND "id" NOT IN (${Prisma.join(
+              exclude.map((id) => Prisma.sql`${id}::uuid`),
+            )})`
+          : whereSql
+      const seed = Math.floor(Date.now() + attempt * 9973)
+      const rows = await this.client.$queryRaw<Array<{ id: string }>>(
+        Prisma.sql`
+          SELECT "id"
+          FROM "Voter" TABLESAMPLE SYSTEM (${percent}) REPEATABLE (${seed})
+          ${whereWithExclusion}
+          LIMIT ${remaining - picked.size}
+        `,
+      )
+      for (const r of rows) {
+        if (picked.size >= remaining) break
+        picked.add(r.id)
+      }
+      if (picked.size < remaining) {
+        percent = percent * 2
+        attempt += 1
+      }
+    }
+    return Array.from(picked)
   }
 }

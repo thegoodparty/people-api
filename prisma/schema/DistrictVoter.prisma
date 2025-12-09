@@ -8,4 +8,5 @@ model DistrictVoter {
     voter      Voter    @relation(fields: [voterId], references: [id], onDelete: Cascade)
 
     @@id([districtId, voterId])
+    @@schema("green")
 }

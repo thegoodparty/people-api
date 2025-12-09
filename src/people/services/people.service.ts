@@ -1,4 +1,4 @@
-import { Prisma, USState } from '@prisma/client'
+import { Prisma, USState, $Enums } from '@prisma/client'
 import {
   DownloadPeopleDTO,
   ListPeopleDTO,
@@ -70,15 +70,15 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
 
     const where: Prisma.VoterWhereInput = {}
 
-    if (state) where.State = state
+    if (state) where.State = state as USState
     const districtId =
       state && districtType && districtName
         ? (
             await this.districtService.findFirst({
               where: {
-                type: districtType,
+                type: districtType, 
                 name: districtName,
-                state: state as USState,
+                state: state as $Enums.DistrictUSState,
               },
               select: { id: true },
             })
@@ -207,7 +207,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
               where: {
                 type: districtType,
                 name: districtName,
-                state: state as USState,
+                state: state as $Enums.DistrictUSState,
               },
               select: { id: true },
             })
@@ -273,7 +273,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
               where: {
                 type: districtType,
                 name: districtName,
-                state: state as USState,
+                state: state as $Enums.DistrictUSState,
               },
               select: { id: true },
             })
@@ -375,7 +375,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
   }): Prisma.VoterWhereInput {
     const { state, districtId, filters, demographicFilter, electionYear } =
       options
-    const where: Prisma.VoterWhereInput = { State: state }
+    const where: Prisma.VoterWhereInput = { State: state as USState }
 
     if (districtId) {
       const andClauses: Prisma.VoterWhereInput[] = []
