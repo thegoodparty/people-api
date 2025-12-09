@@ -45,20 +45,21 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
             })
           )?.id
         : undefined
-    const whereSql = this.buildSampleWhereSql(
+    const voterWhereSql = this.buildVoterOnlyWhereSql(state, hasCellPhone, excludeIds)
+
+    const ids = await this.collectSampleIds(
+      size,
+      percents,
+      voterWhereSql,
       state,
       resolvedDistrictId,
-      hasCellPhone,
-      excludeIds,
     )
-
-    const ids = await this.collectSampleIds(size, percents, whereSql)
 
     if (ids.size < size) {
       const remaining = size - ids.size
       const extraIds = await this.collectRandomIds(
         remaining,
-        whereSql,
+        voterWhereSql,
         Array.from(ids),
       )
       for (const id of extraIds) {
@@ -98,18 +99,45 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     hasCellPhone?: boolean,
     excludeIds?: string[],
   ): Prisma.Sql {
-    const whereParts: Prisma.Sql[] = [Prisma.sql`"State" = ${state}`]
+    const whereParts: Prisma.Sql[] = [
+      Prisma.sql`"State" = CAST(${state}::text AS public."USState")`,
+    ]
     if (districtId) {
       whereParts.push(
         Prisma.sql`EXISTS (
           SELECT 1
           FROM "DistrictVoter" dv
           WHERE dv."voter_id" = "Voter"."id"
-            AND dv."district_id" = ${districtId}
-            AND dv."State" = ${state}
+            AND dv."district_id" = ${Prisma.sql`${districtId}::uuid`}
+            AND dv."State" = CAST(${state}::text AS public."USState")
         )`,
       )
     }
+    if (hasCellPhone === true) {
+      whereParts.push(
+        Prisma.sql`"VoterTelephones_CellPhoneFormatted" IS NOT NULL`,
+      )
+    } else if (hasCellPhone === false) {
+      whereParts.push(Prisma.sql`"VoterTelephones_CellPhoneFormatted" IS NULL`)
+    }
+    if (excludeIds && excludeIds.length > 0) {
+      whereParts.push(
+        Prisma.sql`"id" NOT IN (${Prisma.join(
+          excludeIds.map((id) => Prisma.sql`${id}::uuid`),
+        )})`,
+      )
+    }
+    return Prisma.sql`WHERE ${Prisma.join(whereParts, ' AND ')}`
+  }
+
+  private buildVoterOnlyWhereSql(
+    state: string,
+    hasCellPhone?: boolean,
+    excludeIds?: string[],
+  ): Prisma.Sql {
+    const whereParts: Prisma.Sql[] = [
+      Prisma.sql`"State" = CAST(${state}::text AS public."USState")`,
+    ]
     if (hasCellPhone === true) {
       whereParts.push(
         Prisma.sql`"VoterTelephones_CellPhoneFormatted" IS NOT NULL`,
@@ -137,7 +165,9 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
   async collectSampleIds(
     target: number,
     _percents: number[],
-    whereSql: Prisma.Sql,
+    voterWhereSql: Prisma.Sql,
+    state: string,
+    districtId?: string,
   ): Promise<Set<string>> {
     const ids = new Set<string>()
 
@@ -148,14 +178,29 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       const remaining = target - ids.size
       const bucket = Math.floor(Math.random() * d)
       const condition = Prisma.sql`(abs(pg_catalog.hashtextextended("id"::text, 0)) % ${d}) = ${bucket}`
-      const rows = await this.client.$queryRaw<
-        Array<{ id: string }>
-      >(Prisma.sql`
-        SELECT "id"
-        FROM "Voter"
-        ${whereSql} AND ${condition}
-        LIMIT ${remaining}
-      `)
+      if (!districtId) throw new Error('No districtId in collectSampleIds')
+      const rows = districtId
+        ? await this.client.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+            SELECT "id"
+            FROM "Voter"
+            ${voterWhereSql}
+            AND EXISTS (
+              SELECT 1
+              FROM "DistrictVoter" dv
+              WHERE dv."voter_id" = "Voter"."id"
+                AND dv."district_id" = ${Prisma.sql`${districtId}::uuid`}
+                AND dv."State" = CAST(${state}::text AS public."USState")
+            )
+            AND ${condition}
+            LIMIT ${remaining}
+          `)
+        : await this.client.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+            SELECT "id"
+            FROM "Voter"
+            ${voterWhereSql}
+            AND ${condition}
+            LIMIT ${remaining}
+          `)
       for (const row of rows) {
         if (ids.size >= target) break
         ids.add(row.id)
@@ -167,7 +212,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
 
   async collectRandomIds(
     remaining: number,
-    whereSql: Prisma.Sql,
+    voterWhereSql: Prisma.Sql,
     excludeIds: string[],
   ): Promise<string[]> {
     const picked = new Set<string>()
@@ -176,12 +221,11 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     const maxPercent = 20
     while (picked.size < remaining && percent <= maxPercent) {
       const exclude = excludeIds.concat(Array.from(picked))
-      const whereWithExclusion =
-        exclude.length > 0
-          ? Prisma.sql`${whereSql} AND "id" NOT IN (${Prisma.join(
-              exclude.map((id) => Prisma.sql`${id}::uuid`),
-            )})`
-          : whereSql
+      const whereWithExclusion = exclude.length
+        ? Prisma.sql`${voterWhereSql} AND "id" NOT IN (${Prisma.join(
+            exclude.map((id) => Prisma.sql`${id}::uuid`),
+          )})`
+        : voterWhereSql
       const seed = Math.floor(Date.now() + attempt * 9973)
       const rows = await this.client.$queryRaw<Array<{ id: string }>>(
         Prisma.sql`
