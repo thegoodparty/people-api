@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, NotFoundException } from '@nestjs/common'
 import { Prisma, $Enums } from '@prisma/client'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
 import { SamplePeopleDTO } from '../people.schema'
@@ -32,19 +32,23 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     )
 
     const percents = this.getSamplingPercents()
-    const resolvedDistrictId =
-      state && districtType && districtName
-        ? (
-            await this.districtService.findFirst({
-              where: {
-                type: districtType as string,
-                name: districtName,
-                state: state as $Enums.DistrictUSState,
-              },
-              select: { id: true },
-            })
-          )?.id
-        : undefined
+    const hasDistrictParams = Boolean(state && districtType && districtName)
+    const resolvedDistrict = hasDistrictParams
+      ? await this.districtService.findFirst({
+          where: {
+            type: districtType as string,
+            name: districtName,
+            state: state as $Enums.DistrictUSState,
+          },
+          select: { id: true },
+        })
+      : undefined
+    if (hasDistrictParams && !resolvedDistrict?.id) {
+      throw new NotFoundException(
+        `District not found for state=${state} type=${districtType as string} name=${districtName}`,
+      )
+    }
+    const resolvedDistrictId = resolvedDistrict?.id
     const voterWhereSql = this.buildVoterOnlyWhereSql(
       state,
       hasCellPhone,

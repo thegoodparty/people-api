@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException } from '@nestjs/common'
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common'
 import { Prisma, USState, $Enums } from '@prisma/client'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
 import {
@@ -94,19 +98,23 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
 
     const performanceField = this.getPerformanceField(electionYear)
 
-    const resolvedDistrictId =
-      state && districtType && districtName
-        ? (
-            await this.districtService.findFirst({
-              where: {
-                type: districtType,
-                name: districtName,
-                state: state as $Enums.DistrictUSState,
-              },
-              select: { id: true },
-            })
-          )?.id
-        : undefined
+    const hasDistrictParams = Boolean(state && districtType && districtName)
+    const resolvedDistrict = hasDistrictParams
+      ? await this.districtService.findFirst({
+          where: {
+            type: districtType,
+            name: districtName,
+            state: state as $Enums.DistrictUSState,
+          },
+          select: { id: true },
+        })
+      : undefined
+    if (hasDistrictParams && !resolvedDistrict?.id) {
+      throw new NotFoundException(
+        `District not found for state=${state} type=${districtType} name=${districtName}`,
+      )
+    }
+    const resolvedDistrictId = resolvedDistrict?.id
 
     const where = this.buildWhere({
       state,
@@ -573,7 +581,9 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
       if (where.AND) {
         andClauses.push(...(Array.isArray(where.AND) ? where.AND : [where.AND]))
       }
-      andClauses.push({ DistrictLinks: { some: { districtId, state: state as USState } } })
+      andClauses.push({
+        DistrictLinks: { some: { districtId, state: state as USState } },
+      })
       where.AND = andClauses
     }
 
