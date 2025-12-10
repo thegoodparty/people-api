@@ -1,5 +1,9 @@
-import { Injectable, BadRequestException } from '@nestjs/common'
-import { Prisma } from '@prisma/client'
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common'
+import { Prisma, USState, $Enums } from '@prisma/client'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
 import {
   DEMOGRAPHIC_FILTER_FIELDS,
@@ -27,9 +31,13 @@ import type {
   StatsCategoryMap,
   PerformanceFieldKey,
 } from '../people.types'
+import { DistrictService } from 'src/district/services/district.service'
 
 @Injectable()
 export class StatsService extends createPrismaBase(MODELS.Voter) {
+  constructor(private readonly districtService: DistrictService) {
+    super()
+  }
   private static readonly MAX_FIELDS = 15
   private static readonly API_FIELD_MAX_CHARS = 100
   private static readonly API_FIELD_MAX_VALUES = 50
@@ -90,10 +98,27 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
 
     const performanceField = this.getPerformanceField(electionYear)
 
+    const hasDistrictParams = Boolean(state && districtType && districtName)
+    const resolvedDistrict = hasDistrictParams
+      ? await this.districtService.findFirst({
+          where: {
+            type: districtType,
+            name: districtName,
+            state: state as $Enums.DistrictUSState,
+          },
+          select: { id: true },
+        })
+      : undefined
+    if (hasDistrictParams && !resolvedDistrict?.id) {
+      throw new NotFoundException(
+        `District not found for state=${state} type=${districtType} name=${districtName}`,
+      )
+    }
+    const resolvedDistrictId = resolvedDistrict?.id
+
     const where = this.buildWhere({
       state,
-      districtType: districtType as keyof Prisma.VoterWhereInput | undefined,
-      districtName,
+      districtId: resolvedDistrictId,
       filters,
       performanceField,
       demographicFilter: filter as DemographicFilter,
@@ -535,8 +560,7 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
 
   private buildWhere(options: {
     state: string
-    districtType?: keyof Prisma.VoterWhereInput | undefined
-    districtName?: string | undefined
+    districtId?: string | undefined
     filters: AllowedFilter[]
     performanceField: PerformanceFieldKey
     demographicFilter: DemographicFilter
@@ -544,19 +568,23 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
   }): Prisma.VoterWhereInput {
     const {
       state,
-      districtType,
-      districtName,
+      districtId,
       filters,
       performanceField,
       demographicFilter,
       electionYear,
     } = options
-    const where: Prisma.VoterWhereInput = { State: state }
+    const where: Prisma.VoterWhereInput = { State: state as USState }
 
-    if (districtType && districtName) {
-      ;(where as Record<string, unknown>)[districtType] = {
-        equals: districtName,
+    if (districtId) {
+      const andClauses: Prisma.VoterWhereInput[] = []
+      if (where.AND) {
+        andClauses.push(...(Array.isArray(where.AND) ? where.AND : [where.AND]))
       }
+      andClauses.push({
+        DistrictLinks: { some: { districtId, state: state as USState } },
+      })
+      where.AND = andClauses
     }
 
     // genders

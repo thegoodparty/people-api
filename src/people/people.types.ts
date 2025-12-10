@@ -26,7 +26,7 @@ export type AllowedFilter =
 
 export interface BuildWhereOptions {
   state: string
-  districtType?: keyof Prisma.VoterWhereInput | undefined
+  districtType?: string | undefined
   districtName?: string | undefined
   filters: AllowedFilter[]
   ageIds?: string[]
