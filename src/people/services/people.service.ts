@@ -656,6 +656,32 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     }
   }
 
+  private processRangeOperation(
+    apiField: string,
+    prismaField: string,
+    gte?: number | string,
+    lt?: number | string,
+  ): Prisma.VoterWhereInput | null {
+    if (gte === undefined && lt === undefined) return null
+
+    const rangeFilter: { gte?: number; lt?: number } = {}
+    if (gte !== undefined) {
+      const numValue = typeof gte === 'string' ? Number(gte) : gte
+      if (isNaN(numValue)) {
+        throw new BadRequestException(`Field ${apiField} expects a number for gte`)
+      }
+      rangeFilter.gte = numValue
+    }
+    if (lt !== undefined) {
+      const numValue = typeof lt === 'string' ? Number(lt) : lt
+      if (isNaN(numValue)) {
+        throw new BadRequestException(`Field ${apiField} expects a number for lt`)
+      }
+      rangeFilter.lt = numValue
+    }
+    return { [prismaField]: rangeFilter } as Prisma.VoterWhereInput
+  }
+
   private combineFieldClauses(
     clauses: Prisma.VoterWhereInput[],
     andClauses: Prisma.VoterWhereInput[],
@@ -765,6 +791,32 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       if (ops.is === 'null' || ops.is === 'not_null') {
         const nullClause = this.processNullOperation(prismaField, ops.is)
         clauses.push(nullClause)
+      }
+
+      if (type === 'integer' && (ops.gte !== undefined || ops.lt !== undefined)) {
+        const rangeClause = this.processRangeOperation(
+          apiField,
+          prismaField,
+          ops.gte,
+          ops.lt,
+        )
+        if (rangeClause) {
+          clauses.push(rangeClause)
+        }
+      }
+
+      if (type === 'integer' && ops.orRanges && Array.isArray(ops.orRanges)) {
+        for (const range of ops.orRanges) {
+          const rangeClause = this.processRangeOperation(
+            apiField,
+            prismaField,
+            range.gte,
+            range.lt,
+          )
+          if (rangeClause) {
+            clauses.push(rangeClause)
+          }
+        }
       }
 
       this.combineFieldClauses(clauses, andClauses)

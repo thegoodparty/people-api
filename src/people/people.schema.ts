@@ -107,16 +107,56 @@ const filtersSchema = z
   .optional()
   .default([])
 
-const fieldOpsSchema = z.object({
-  eq: z.union([z.string(), z.boolean()]).optional(),
-  in: z
-    .preprocess(
-      (v) => coerceArray(v),
-      z.array(z.union([z.string(), z.boolean()])),
-    )
-    .optional(),
-  is: z.enum(['null', 'not_null']).optional(),
-})
+const numericRangeSchema = z
+  .object({
+    gte: z.coerce.number().optional(),
+    lt: z.coerce.number().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.gte !== undefined && data.lt !== undefined) {
+        return data.gte < data.lt
+      }
+      return true
+    },
+    { message: 'gte must be less than lt' },
+  )
+
+const coerceIndexedObjectToArray = (value: unknown): unknown[] => {
+  if (Array.isArray(value)) return value
+  if (value === null || typeof value !== 'object') return []
+
+  const obj = value as Record<string, unknown>
+  const numericKeys = Object.keys(obj).filter((key) => /^\d+$/.test(key))
+  if (numericKeys.length === 0) return []
+
+  numericKeys.sort((a, b) => Number(a) - Number(b))
+  return numericKeys.map((key) => obj[key])
+}
+
+const fieldOpsSchema = z
+  .object({
+    eq: z.union([z.string(), z.boolean()]).optional(),
+    in: z
+      .preprocess(
+        (v) => coerceArray(v),
+        z.array(z.union([z.string(), z.boolean()])),
+      )
+      .optional(),
+    is: z.enum(['null', 'not_null']).optional(),
+    gte: z.coerce.number().optional(),
+    lt: z.coerce.number().optional(),
+    orRanges: z.preprocess(coerceIndexedObjectToArray, z.array(numericRangeSchema)).optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.gte !== undefined && data.lt !== undefined) {
+        return data.gte < data.lt
+      }
+      return true
+    },
+    { message: 'gte must be less than lt' },
+  )
 
 const demographicFilterSchema = z.record(fieldOpsSchema)
 
@@ -197,18 +237,12 @@ const allowedCategoryDefaults = [
   'familyMarital',
 ] as const
 
-// Defaults: include all built-in categories plus all demographic filter fields
+// Defaults: include all built-in categories plus demographic fields where includeInDefaultStats !== false
 const allowedCategoryAllDefault: string[] = [
   ...allowedCategoryDefaults,
-  ...Object.keys(DEMOGRAPHIC_FILTER_FIELDS).filter(
-    (k) =>
-      ![
-        'voterTelephonesCellPhoneFormatted',
-        'voterTelephonesLandlineFormatted',
-        'votingPerformanceEvenYearGeneral',
-        'votingPerformanceMinorElection',
-      ].includes(k),
-  ),
+  ...Object.entries(DEMOGRAPHIC_FILTER_FIELDS)
+    .filter(([_, field]) => field.includeInDefaultStats !== false)
+    .map(([key]) => key),
 ]
 
 // Permit any DEMOGRAPHIC_FILTER_FIELDS key name too (validated at runtime in service)

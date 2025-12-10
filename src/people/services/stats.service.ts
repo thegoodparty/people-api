@@ -261,6 +261,9 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
         pushTask(apiField, () =>
           this.computeBooleanBuckets(where, prismaField, totalConstituents),
         )
+      } else if (meta.type === 'integer') {
+        // Skip - string handler fails for integers (can't count empty strings on int fields)
+        continue
       } else {
         pushTask(apiField, () =>
           this.computeStringFieldTopN(
