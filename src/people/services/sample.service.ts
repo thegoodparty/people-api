@@ -1,5 +1,5 @@
-import { Injectable, BadRequestException } from '@nestjs/common'
-import { Prisma, USState, $Enums } from '@prisma/client'
+import { Injectable } from '@nestjs/common'
+import { Prisma, $Enums } from '@prisma/client'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
 import { SamplePeopleDTO } from '../people.schema'
 import { DemographicFilter } from '../people.filters'
@@ -45,7 +45,11 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
             })
           )?.id
         : undefined
-    const voterWhereSql = this.buildVoterOnlyWhereSql(state, hasCellPhone, excludeIds)
+    const voterWhereSql = this.buildVoterOnlyWhereSql(
+      state,
+      hasCellPhone,
+      excludeIds,
+    )
 
     const ids = await this.collectSampleIds(
       size,

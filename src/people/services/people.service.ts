@@ -76,7 +76,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
         ? (
             await this.districtService.findFirst({
               where: {
-                type: districtType, 
+                type: districtType,
                 name: districtName,
                 state: state as $Enums.DistrictUSState,
               },
