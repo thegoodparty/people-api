@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
+import { INCOME_FILTERS } from 'src/shared/constants/incomeFilters'
 import {
   DEMOGRAPHIC_FILTER_FIELDS,
   DemographicFilter,
@@ -41,12 +42,18 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
     [51, 200],
   ]
   private static readonly DEFAULT_INCOME_RANGES: [number, number][] = [
-    [0, 24999],
-    [25000, 50000],
-    [50001, 75000],
-    [75001, 100000],
-    [100001, 150000],
-    [150001, 1000000000],
+    [1000, 14999],
+    [15000, 24999],
+    [25000, 34999],
+    [35000, 49999],
+    [50000, 74999],
+    [75000, 99999],
+    [100000, 124999],
+    [125000, 149999],
+    [150000, 174999],
+    [175000, 199999],
+    [200000, 249999],
+    [250000, 1000000000],
   ]
 
   private getPerformanceField(electionYear: number): PerformanceFieldKey {
@@ -684,6 +691,70 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
           )
         }
         andClauses.push({ OR: ageOr })
+        where.AND = andClauses
+      }
+    }
+
+    const usesIncome = filters.some((f) => INCOME_FILTERS.includes(f as never))
+    if (usesIncome) {
+      type IncomeClause = Prisma.VoterWhereInput & {
+        Estimated_Income_Amount_Int?: Prisma.IntNullableFilter | null
+      }
+      const incomeOr: IncomeClause[] = []
+      if (filters.includes('income1kTo15k'))
+        incomeOr.push({ Estimated_Income_Amount_Int: { gte: 1000, lt: 15000 } })
+      if (filters.includes('income15kTo25k'))
+        incomeOr.push({
+          Estimated_Income_Amount_Int: { gte: 15000, lt: 25000 },
+        })
+      if (filters.includes('income25kTo35k'))
+        incomeOr.push({
+          Estimated_Income_Amount_Int: { gte: 25000, lt: 35000 },
+        })
+      if (filters.includes('income35kTo50k'))
+        incomeOr.push({
+          Estimated_Income_Amount_Int: { gte: 35000, lt: 50000 },
+        })
+      if (filters.includes('income50kTo75k'))
+        incomeOr.push({
+          Estimated_Income_Amount_Int: { gte: 50000, lt: 75000 },
+        })
+      if (filters.includes('income75kTo100k'))
+        incomeOr.push({
+          Estimated_Income_Amount_Int: { gte: 75000, lt: 100000 },
+        })
+      if (filters.includes('income100kTo125k'))
+        incomeOr.push({
+          Estimated_Income_Amount_Int: { gte: 100000, lt: 125000 },
+        })
+      if (filters.includes('income125kTo150k'))
+        incomeOr.push({
+          Estimated_Income_Amount_Int: { gte: 125000, lt: 150000 },
+        })
+      if (filters.includes('income150kTo175k'))
+        incomeOr.push({
+          Estimated_Income_Amount_Int: { gte: 150000, lt: 175000 },
+        })
+      if (filters.includes('income175kTo200k'))
+        incomeOr.push({
+          Estimated_Income_Amount_Int: { gte: 175000, lt: 200000 },
+        })
+      if (filters.includes('income200kTo250k'))
+        incomeOr.push({
+          Estimated_Income_Amount_Int: { gte: 200000, lt: 250000 },
+        })
+      if (filters.includes('income250kPlus'))
+        incomeOr.push({ Estimated_Income_Amount_Int: { gte: 250000 } })
+      if (filters.includes('incomeUnknown'))
+        incomeOr.push({ Estimated_Income_Amount_Int: null as never })
+      if (incomeOr.length) {
+        const andClauses: Prisma.VoterWhereInput[] = []
+        if (where.AND) {
+          andClauses.push(
+            ...(Array.isArray(where.AND) ? where.AND : [where.AND]),
+          )
+        }
+        andClauses.push({ OR: incomeOr })
         where.AND = andClauses
       }
     }
