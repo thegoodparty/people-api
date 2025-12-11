@@ -35,3 +35,5 @@ ALTER TABLE green."DistrictVoter_new"
     REFERENCES green."Voter_new"("State", "id");
 -- end DistrictVoter_new
 -------------------------------------------
+
+CREATE INDEX "Voter_Age_Int_idx" ON green."Voter_new_AK" USING btree ("Age_Int")
