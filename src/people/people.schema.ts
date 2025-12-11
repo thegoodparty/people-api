@@ -1,4 +1,5 @@
 import { createZodDto } from 'nestjs-zod'
+import { INCOME_FILTERS } from 'src/shared/constants/incomeFilters'
 import { STATE_CODES } from 'src/shared/constants/states'
 import { z } from 'zod'
 import { DEMOGRAPHIC_FILTER_FIELDS } from './people.filters'
@@ -23,7 +24,7 @@ const allowedFilters = [
   'genderMale',
   'genderFemale',
   'genderUnknown',
-  'incomeUnknown',
+  ...INCOME_FILTERS,
   'audienceRequest',
   'cellPhoneFormatted',
   'landlineFormatted',
@@ -207,6 +208,7 @@ const allowedCategoryAllDefault: string[] = [
         'voterTelephonesLandlineFormatted',
         'votingPerformanceEvenYearGeneral',
         'votingPerformanceMinorElection',
+        'estimatedIncomeAmount', 
       ].includes(k),
   ),
 ]

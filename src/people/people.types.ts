@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client'
+import { IncomeFilter } from 'src/shared/constants/incomeFilters'
 
 export type AllowedFilter =
   | 'audienceSuperVoters'
@@ -19,7 +20,7 @@ export type AllowedFilter =
   | 'genderMale'
   | 'genderFemale'
   | 'genderUnknown'
-  | 'incomeUnknown'
+  | IncomeFilter
   | 'audienceRequest'
   | 'cellPhoneFormatted'
   | 'landlineFormatted'
