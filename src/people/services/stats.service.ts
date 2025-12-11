@@ -827,6 +827,14 @@ export class StatsService extends createPrismaBase(MODELS.Voter) {
       electionYear,
     )
     if (Object.keys(demographicWhere).length) {
+      // Merge AND clauses instead of overwriting
+      if (demographicWhere.AND && where.AND) {
+        const existingAnd = Array.isArray(where.AND) ? where.AND : [where.AND]
+        const newAnd = Array.isArray(demographicWhere.AND)
+          ? demographicWhere.AND
+          : [demographicWhere.AND]
+        demographicWhere.AND = [...existingAnd, ...newAnd]
+      }
       Object.assign(where, demographicWhere)
     }
 
