@@ -120,32 +120,25 @@ const fieldOpsSchema = z.object({
 
 const demographicFilterSchema = z.record(fieldOpsSchema)
 
-export const listPeopleSchema = z
-  .object({
-    state: stateSchema,
-    districtType: z.string().optional(),
-    districtName: z.string().optional(),
-    electionYear: electionYearSchema,
-    filters: filtersSchema,
-    full: booleanDefault(true),
-    resultsPerPage: z.coerce.number().optional().default(50),
-    page: z.coerce.number().optional().default(1),
-    filter: demographicFilterSchema.optional().default({}),
-  })
-  .refine(
-    (v) =>
-      (v.districtType && v.districtName) ||
-      (!v.districtType && !v.districtName),
-    'districtType and districtName must be provided together',
-  )
+export const listPeopleSchema = z.object({
+  state: stateSchema,
+  districtType: z.string(),
+  districtName: z.string(),
+  electionYear: electionYearSchema,
+  filters: filtersSchema,
+  full: booleanDefault(true),
+  resultsPerPage: z.coerce.number().optional().default(50),
+  page: z.coerce.number().optional().default(1),
+  filter: demographicFilterSchema.optional().default({}),
+})
 
 export class ListPeopleDTO extends createZodDto(listPeopleSchema) {}
 
 export const downloadPeopleSchema = z.object({
   state: stateSchema,
   // Support both naming conventions; aliases are optional
-  districtType: z.string().optional(),
-  districtName: z.string().optional(),
+  districtType: z.string(),
+  districtName: z.string(),
   electionLocation: z.string().optional(),
   electionType: z.string().optional(),
   electionYear: electionYearSchema,
@@ -159,8 +152,8 @@ export class DownloadPeopleDTO extends createZodDto(downloadPeopleSchema) {}
 export const searchPeopleSchema = z
   .object({
     state: stateSchema,
-    districtType: z.string().optional(),
-    districtName: z.string().optional(),
+    districtType: z.string(),
+    districtName: z.string(),
     phone: z.string().optional(),
     name: z.string().optional(),
     firstName: z.string().optional(),
@@ -177,12 +170,6 @@ export const searchPeopleSchema = z
   .refine(
     (v) => !!(v.phone || v.name || v.firstName || v.lastName),
     'Provide phone or name to search',
-  )
-  .refine(
-    (v) =>
-      (v.districtType && v.districtName) ||
-      (!v.districtType && !v.districtName),
-    'districtType and districtName must be provided together',
   )
 
 export class SearchPeopleDTO extends createZodDto(searchPeopleSchema) {}
@@ -215,8 +202,8 @@ const allowedCategoryAllDefault: string[] = [
 export const statsSchema = z.object({
   state: stateSchema,
   // Keep flexible like download endpoint
-  districtType: z.string().optional(),
-  districtName: z.string().optional(),
+  districtType: z.string(),
+  districtName: z.string(),
   electionYear: electionYearSchema,
   filters: filtersSchema,
   filter: demographicFilterSchema.optional().default({}),
@@ -246,8 +233,8 @@ export class StatsDTO extends createZodDto(statsSchema) {}
 
 export const samplePeopleSchema = z.object({
   state: stateSchema,
-  districtType: z.string().optional(),
-  districtName: z.string().optional(),
+  districtType: z.string(),
+  districtName: z.string(),
   electionYear: electionYearSchema,
   size: z.coerce.number().int().min(1).max(10000).optional().default(500),
   full: booleanDefault(true),
