@@ -1,4 +1,4 @@
-import { Prisma, USState, $Enums } from '@prisma/client'
+import { Prisma, USState, $Enums, Voter } from '@prisma/client'
 import {
   DownloadPeopleDTO,
   ListPeopleDTO,
@@ -32,6 +32,10 @@ const filterToVoterStatusMap: Partial<Record<AllowedFilter, string>> = {
   audienceUnlikelyVoters: 'Unlikely',
   audienceSuperVoters: 'Super',
 }
+
+export const DATABASE_SCHEMA = 'green'
+const VOTER_TABLENAME = 'Voter'
+const DISTRICTVOTER_TABLENAME = 'DistrictVoter'
 
 @Injectable()
 export class PeopleService extends createPrismaBase(MODELS.Voter) {
@@ -139,17 +143,6 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       }
     }
 
-    if (districtId) {
-      const andClauses: Prisma.VoterWhereInput[] = []
-      if (where.AND) {
-        andClauses.push(...(Array.isArray(where.AND) ? where.AND : [where.AND]))
-      }
-      andClauses.push({
-        DistrictLinks: { some: { districtId, state: state as USState } },
-      })
-      where.AND = andClauses
-    }
-
     const take = resultsPerPage
     const skip = (page - 1) * resultsPerPage
 
@@ -169,16 +162,28 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       Parties_Description: true,
     }
 
-    const [totalResults, results] = await Promise.all([
-      this.model.count({ where }),
-      this.model.findMany({
-        where,
-        take,
-        skip,
-        select,
-        orderBy: [{ LastName: 'asc' }, { FirstName: 'asc' }],
-      }),
-    ])
+    // const [totalResults, results] = await Promise.all([
+    //   this.model.count({ where }),
+    //   this.model.findMany({
+    //     where,
+    //     take,
+    //     skip,
+    //     select,
+    //     orderBy: [{ LastName: 'asc' }, { FirstName: 'asc' }],
+    //   }),
+    // ])
+    //const stateCast = Prisma.sql`CAST(${state}::text AS "public"."USState")`
+    const whereParts: Prisma.Sql[] = []
+    whereParts.push(Prisma.sql`v."State" = ${state}`)
+    whereParts.push(Prisma.sql`dv."State" = ${state}`)
+    whereParts.push(Prisma.sql`dv."district_id" = ${districtId}`)
+    // Push demographic and other filters
+    const whereClause: Prisma.Sql = Prisma.sql`WHERE ${Prisma.join(whereParts, ' AND ')}`
+
+    this._prisma.$queryRaw<Voter[]>`SELECT * FROM "green"."State" v
+      JOIN "green"."State" dv ON v.id = dv.voter_id
+      ${whereClause}
+      ORDER BY v.id`
 
     const totalPages = Math.max(1, Math.ceil(totalResults / resultsPerPage))
     const currentPage = Math.min(Math.max(1, page), totalPages)
@@ -255,10 +260,22 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
         })
       : model.count({ where })
 
-    const [totalResults, people] = await Promise.all([
-      totalResultsPromise,
-      model.findMany({ where, take, skip, select }),
-    ])
+    // const [totalResults, people] = await Promise.all([
+    //   totalResultsPromise,
+    //   model.findMany({ where, take, skip, select }),
+    // ])
+
+    const whereParts: Prisma.Sql[] = []
+    whereParts.push(Prisma.sql`v."State" = ${state}`)
+    whereParts.push(Prisma.sql`dv."State" = ${state}`)
+    whereParts.push(Prisma.sql`dv."district_id" = ${resolvedDistrictId}`)
+    // Push demographic and other filters
+    const whereClause: Prisma.Sql = Prisma.sql`WHERE ${Prisma.join(whereParts, ' AND ')}`
+
+    this._prisma.$queryRaw<Voter[]>`SELECT * FROM "green"."State" v
+      JOIN "green"."State" dv ON v.id = dv.voter_id
+      ${whereClause}
+      ORDER BY v.id`
 
     const totalPages = Math.max(1, Math.ceil(totalResults / resultsPerPage))
     const currentPage = Math.min(Math.max(1, page), totalPages)
