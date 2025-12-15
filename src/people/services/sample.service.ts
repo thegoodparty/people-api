@@ -67,7 +67,9 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       const remaining = size - ids.size
       const extraIds = await this.collectRandomIds(
         remaining,
-        voterWhereSql,
+        state,
+        resolvedDistrictId,
+        hasCellPhone,
         Array.from(ids),
       )
       for (const id of extraIds) {
@@ -82,19 +84,6 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       where: { id: { in: Array.from(ids) } },
       select,
     })
-  }
-
-  private validateDistrictType(districtType?: string): void {
-    return // No op
-    // if (!districtType) return
-    // const isValidField = Object.values(Prisma.VoterScalarFieldEnum).includes(
-    //   districtType as Prisma.VoterScalarFieldEnum,
-    // )
-    // if (!isValidField) {
-    //   throw new BadRequestException(
-    //     `Unsupported districtType: ${districtType as string}`,
-    //   )
-    // }
   }
 
   private getSamplingPercents(): number[] {
@@ -220,7 +209,9 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
 
   async collectRandomIds(
     remaining: number,
-    voterWhereSql: Prisma.Sql,
+    state: string,
+    districtId: string | undefined,
+    hasCellPhone: boolean | undefined,
     excludeIds: string[],
   ): Promise<string[]> {
     const picked = new Set<string>()
@@ -229,11 +220,12 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     const maxPercent = 20
     while (picked.size < remaining && percent <= maxPercent) {
       const exclude = excludeIds.concat(Array.from(picked))
-      const whereWithExclusion = exclude.length
-        ? Prisma.sql`${voterWhereSql} AND "id" NOT IN (${Prisma.join(
-            exclude.map((id) => Prisma.sql`${id}::uuid`),
-          )})`
-        : voterWhereSql
+      const whereWithExclusion = this.buildSampleWhereSql(
+        state,
+        districtId,
+        hasCellPhone,
+        exclude,
+      )
       const seed = Math.floor(Date.now() + attempt * 9973)
       const rows = await this.client.$queryRaw<Array<{ id: string }>>(
         Prisma.sql`
