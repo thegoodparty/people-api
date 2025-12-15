@@ -23,8 +23,6 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       excludeIds = [],
     } = dto
 
-    this.validateDistrictType(districtType as string | undefined)
-
     const select = this.buildVoterSelect(
       full,
       electionYear ?? new Date().getFullYear(),
