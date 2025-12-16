@@ -34,7 +34,7 @@ export class PrismaService
     url.searchParams.set('pool_timeout', '5')
     url.searchParams.set('connect_timeout', '5')
     // Queries that take longer than 20 seconds will be cancelled.
-    url.searchParams.set('socket_timeout', '20')
+    url.searchParams.set('socket_timeout', '60')
 
     super({
       log: PRISMA_LOG_LEVELS.map((level) => ({
@@ -61,8 +61,8 @@ export class PrismaService
           'upsert',
           'delete',
           'deleteMany',
-          '$executeRaw',
-          '$executeRawUnsafe',
+          //'$executeRaw',
+          //'$executeRawUnsafe',
         ]
         if (blocked.includes(params.action)) {
           throw new Error('Writes are disabled in perf-local')

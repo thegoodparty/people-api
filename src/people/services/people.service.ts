@@ -78,20 +78,11 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
 
     const _where: Prisma.VoterWhereInput = {}
     if (state) _where.State = state as USState
-    const resolvedDistrict = await this.districtService.findFirst({
-      where: {
-        type: districtType,
-        name: districtName,
-        state: state as $Enums.DistrictUSState,
-      },
-      select: { id: true },
+    const districtId = await this.districtService.findDistrictId({
+      state,
+      type: districtType,
+      name: districtName,
     })
-    if (!resolvedDistrict?.id) {
-      throw new NotFoundException(
-        `District not found for state=${state} type=${districtType} name=${districtName}`,
-      )
-    }
-    const districtId = resolvedDistrict.id
 
     const tokens = (name || '').trim().split(/\s+/).filter(Boolean)
     const hasNameTokens = tokens.length > 0 || firstName || lastName
