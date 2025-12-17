@@ -19,6 +19,12 @@
     "migrate:dev": "node ./scripts/disallow-perf-local.js && npx prisma migrate dev",
     "migrate:deploy": "node ./scripts/disallow-perf-local.js && npx prisma migrate deploy",
     "migrate:reset": "node ./scripts/disallow-perf-local.js && npx prisma migrate reset --force",
+    "migrate:schema:dev": "node ./scripts/disallow-perf-local.js && tsx ./scripts/run-migrations.ts --mode dev --stage tables",
+    "migrate:schema:create": "cd prisma/migrations-schema && npx prisma migrate dev --create-only",
+    "migrate:indexes:dev": "node ./scripts/disallow-perf-local.js && tsx ./scripts/migrate-indexes.ts --mode dev --stage indexes",
+    "migrate:indexes:create": "cd prisma/migrations-indexes && npx prisma migrate dev --create-only",
+    "migrate:all:deploy": "npm run migrate:schema:deploy && npm run migrate:indexes:deploy",
+    "db:pull": "node ./scripts/db-pull-after-migrate.js",
     "generate": "npx prisma generate",
     "seed": "npx prisma db seed",
     "perf:all": "sh -c '\n      k6 run --summary-trend-stats \"avg,med,p(50),p(95),p(99),min,max\" --env ONLY=small perf/people-get.ts || true;\n      k6 run --summary-trend-stats \"avg,med,p(50),p(95),p(99),min,max\" --env ONLY=large perf/people-get.ts || true;\n      k6 run --summary-trend-stats \"avg,med,p(50),p(95),p(99),min,max\" --env ONLY=small perf/stats-get.ts || true;\n      k6 run --summary-trend-stats \"avg,med,p(50),p(95),p(99),min,max\" --env ONLY=large perf/stats-get.ts || true;\n      k6 run --summary-trend-stats \"avg,med,p(50),p(95),p(99),min,max\" --env ONLY=small perf/sample-get.ts || true;\n      k6 run --summary-trend-stats \"avg,med,p(50),p(95),p(99),min,max\" --env ONLY=large perf/sample-get.ts || true\n    '",
@@ -26,7 +32,7 @@
   },
   "prisma": {
     "seed": "tsx ./seed/seed.ts",
-    "schema": "prisma/schema"
+    "schema": "prisma/generated-schema.prisma"
   },
   "dependencies": {
     "@fast-csv/format": "^5.0.5",
@@ -38,8 +44,8 @@
     "@nestjs/core": "^11.0.11",
     "@nestjs/platform-fastify": "^11.0.11",
     "@nestjs/swagger": "^11.0.6",
-    "@prisma/client": "^6.5.0",
-    "newrelic": "^11.20.0",
+    "@prisma/client": "^6.12.0",
+    "@types/yargs": "^17.0.35",
     "deepmerge-ts": "^7.1.5",
     "dotenv": "^16.4.7",
     "jsonwebtoken": "^9.0.2",
@@ -47,11 +53,13 @@
     "module-alias": "^2.2.3",
     "nestjs-pino": "^4.4.1",
     "nestjs-zod": "^4.3.1",
+    "newrelic": "^11.20.0",
     "pino-http": "^10.5.0",
-    "prisma": "^6.4.1",
+    "prisma": "^6.12.0",
     "qs": "^6.13.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "yargs": "^18.0.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
@@ -73,7 +81,6 @@
     "eslint-plugin-unused-imports": "^4.1.4",
     "globals": "^16.0.0",
     "prettier": "^3.0.0",
-    "prisma": "^6.5.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.6",
     "typescript": "^5.8.2",
