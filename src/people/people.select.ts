@@ -64,6 +64,7 @@ export function buildVoterSelect(
       ] = true
     }
 
+    // TODO: I'm not sure if we should change what columns are returned based on the demographic filter, you decide @Stephen
     addAllDemographicColumnsToSelect(select)
     return select
   }

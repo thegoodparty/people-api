@@ -2,13 +2,23 @@ import { Injectable } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
 import { samplePeopleSchema } from '../people.schema'
-import { DemographicFilter } from '../people.filters'
-import { buildVoterSelect } from '../people.select'
+import { buildVoterSelect, buildVoterSelectSql } from '../people.select'
 import { DistrictService } from 'src/district/services/district.service'
 import { z } from 'zod'
 
 @Injectable()
 export class SampleService extends createPrismaBase(MODELS.Voter) {
+  // DEFAULTS
+  // p = 0.60
+  // s = 3
+  // K = 3
+  // m = dedupe(excludeIds).length
+  // E = floor(N * p)
+  // m_eff = min(m, E) (district-scoped assumption)
+  // A = E - m_eff
+
+  private static readonly PHONE_PERCENT = 0.6
+  private static readonly OVERSAMPLE_FACTOR = 3
   constructor(private readonly districtService: DistrictService) {
     super()
   }
@@ -40,7 +50,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       excludeIds,
     )
 
-    const voterSelect = buildVoterSelect(full, electionYear, {})
+    const voterSelect = buildVoterSelectSql(full, electionYear, 'v')
     // TODO: implement once the filters are done
 
     return await this.client.$transaction(
@@ -50,7 +60,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       `)
 
         return tx.$queryRaw`
-        SELECT v.*
+        ${voterSelect}
         FROM green."DistrictVoter" dv
         JOIN green."Voter" V
           ON v.id = dv.voter_id
@@ -62,10 +72,6 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
         timeout: 60_000,
       },
     )
-  }
-
-  private getSamplingPercents(): number[] {
-    return [0.5, 2, 5]
   }
 
   private buildSampleWhereSql(
@@ -107,97 +113,9 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
   private buildVoterSelect(
     full: boolean,
     electionYear: number,
-    demographicFilter: DemographicFilter,
   ): Prisma.VoterSelect {
-    return buildVoterSelect(full, electionYear, demographicFilter)
+    // TODO: You decide @Stephen what columns we should return here,
+    // we might need a special case to return all since we don't filter sampling based on demographic filters
+    return buildVoterSelect(full, electionYear, {})
   }
-  // async collectSampleIds(
-  //   target: number,
-  //   _percents: number[],
-  //   voterWhereSql: Prisma.Sql,
-  //   state: string,
-  //   districtId?: string,
-  // ): Promise<Set<string>> {
-  //   const ids = new Set<string>()
-
-  //   const divisors: number[] = [1000, 500, 200, 100, 50, 20, 10, 5, 2, 1]
-
-  //   for (const d of divisors) {
-  //     if (ids.size >= target) break
-  //     const remaining = target - ids.size
-  //     const bucket = Math.floor(Math.random() * d)
-  //     const voterHashCondition = Prisma.sql`(abs(pg_catalog.hashtextextended("id"::text, 0)) % ${d}) = ${bucket}`
-  //     let rows: Array<{ id: string }> = []
-  //     if (districtId) {
-  //       rows = await this.client.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-  //         SELECT "id"
-  //         FROM "green"."Voter"
-  //         ${voterWhereSql}
-  //         AND EXISTS (
-  //           SELECT 1
-  //           FROM "green"."DistrictVoter" dv
-  //           WHERE dv."voter_id" = "Voter"."id"
-  //             AND dv."district_id" = ${Prisma.sql`${districtId}::uuid`}
-  //             AND dv."State" = CAST(${state}::text AS public."USState")
-  //         )
-  //         AND ${voterHashCondition}
-  //         LIMIT ${remaining}
-  //       `)
-  //     } else {
-  //       rows = await this.client.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-  //         SELECT "id"
-  //         FROM "green"."Voter"
-  //         ${voterWhereSql}
-  //         AND ${voterHashCondition}
-  //         LIMIT ${remaining}
-  //       `)
-  //     }
-  //     for (const row of rows) {
-  //       if (ids.size >= target) break
-  //       ids.add(row.id)
-  //     }
-  //   }
-
-  //   return ids
-  // }
-
-  // async collectRandomIds(
-  //   remaining: number,
-  //   state: string,
-  //   districtId: string | undefined,
-  //   hasCellPhone: boolean | undefined,
-  //   excludeIds: string[],
-  // ): Promise<string[]> {
-  //   const picked = new Set<string>()
-  //   let percent = 0.1
-  //   let attempt = 0
-  //   const maxPercent = 20
-  //   while (picked.size < remaining && percent <= maxPercent) {
-  //     const exclude = excludeIds.concat(Array.from(picked))
-  //     const whereWithExclusion = this.buildSampleWhereSql(
-  //       state,
-  //       districtId,
-  //       hasCellPhone,
-  //       exclude,
-  //     )
-  //     const seed = Math.floor(Date.now() + attempt * 9973)
-  //     const rows = await this.client.$queryRaw<Array<{ id: string }>>(
-  //       Prisma.sql`
-  //         SELECT "id"
-  //         FROM "green"."Voter" TABLESAMPLE SYSTEM (${percent}) REPEATABLE (${seed})
-  //         ${whereWithExclusion}
-  //         LIMIT ${remaining - picked.size}
-  //       `,
-  //     )
-  //     for (const r of rows) {
-  //       if (picked.size >= remaining) break
-  //       picked.add(r.id)
-  //     }
-  //     if (picked.size < remaining) {
-  //       percent = percent * 2
-  //       attempt += 1
-  //     }
-  //   }
-  //   return Array.from(picked)
-  // }
 }
