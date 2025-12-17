@@ -120,6 +120,7 @@ model District {
     state      DistrictUSState
     VoterLinks DistrictVoter[]
 
+    @@unique([type, name, state])
     // TODO: Add composite unique: [ type, name, state ]
     @@schema("green")
 }
