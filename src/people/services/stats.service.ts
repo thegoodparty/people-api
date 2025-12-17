@@ -9,7 +9,7 @@ const BucketsSchema = z.object({
   buckets: z.array(
     z.object({
       label: z.string(),
-      count: z.number().int().positive(),
+      count: z.number().int(),
       percent: z.number().min(0).max(1),
     }),
   ),
@@ -24,7 +24,7 @@ const BucketStatsSchema = z.object({
 })
 
 export type Stats = Omit<DistrictStats, 'stats'> & {
-  stats: z.infer<typeof BucketStatsSchema>
+  buckets: z.infer<typeof BucketStatsSchema>
 }
 
 @Injectable()
@@ -51,13 +51,13 @@ export class StatsService extends createPrismaBase(MODELS.DistrictStats) {
       )
     }
 
-    const parsedStats = BucketStatsSchema.safeParse(stats.stats)
+    const parsedStats = BucketStatsSchema.safeParse(stats.buckets)
 
     if (!parsedStats.success) {
       this.logger.error(parsedStats.error)
       throw new Error(parsedStats.error.message)
     }
 
-    return { ...stats, stats: parsedStats.data }
+    return { ...stats, buckets: parsedStats.data }
   }
 }
