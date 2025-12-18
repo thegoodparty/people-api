@@ -8,3 +8,7 @@ generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["multiSchema", "prismaSchemaFolder"]
 }
+
+generator json {
+  provider = "prisma-json-types-generator"
+}
