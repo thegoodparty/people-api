@@ -3,7 +3,9 @@ model DistrictStats {
   computedAt                     DateTime @map("computed_at")
   totalConstituents              Int      @map("total_constituents")
   totalConstituentsWithCellPhone Int      @map("total_constituents_with_cell_phone")
-  buckets                        Json     @map("buckets")
+
+  /// [DistrictStatsBuckets]
+  buckets Json @map("buckets")
 
   @@schema("green")
 }

@@ -1,31 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import { DistrictStats } from '@prisma/client'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
-import { z } from 'zod'
 import { StatsDTO } from '../people.schema'
 import { DistrictService } from 'src/district/services/district.service'
-
-const BucketsSchema = z.object({
-  buckets: z.array(
-    z.object({
-      label: z.string(),
-      count: z.number().int(),
-      percent: z.number().min(0).max(1),
-    }),
-  ),
-})
-
-const BucketStatsSchema = z.object({
-  age: BucketsSchema,
-  homeowner: BucketsSchema,
-  education: BucketsSchema,
-  presenceOfChildren: BucketsSchema,
-  estimatedIncomeRange: BucketsSchema,
-})
-
-export type Stats = Omit<DistrictStats, 'stats'> & {
-  buckets: z.infer<typeof BucketStatsSchema>
-}
 
 @Injectable()
 export class StatsService extends createPrismaBase(MODELS.DistrictStats) {
@@ -37,7 +14,7 @@ export class StatsService extends createPrismaBase(MODELS.DistrictStats) {
     state,
     districtType,
     districtName,
-  }: StatsDTO): Promise<Stats> {
+  }: StatsDTO): Promise<DistrictStats> {
     const districtId = await this.districtService.findDistrictId({
       state,
       type: districtType,
@@ -51,13 +28,6 @@ export class StatsService extends createPrismaBase(MODELS.DistrictStats) {
       )
     }
 
-    const parsedStats = BucketStatsSchema.safeParse(stats.buckets)
-
-    if (!parsedStats.success) {
-      this.logger.error(parsedStats.error)
-      throw new Error(parsedStats.error.message)
-    }
-
-    return { ...stats, buckets: parsedStats.data }
+    return stats
   }
 }
