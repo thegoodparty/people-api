@@ -6,7 +6,11 @@ import { buildVoterSelect, buildVoterSelectSql } from '../people.select'
 import { DistrictService } from 'src/district/services/district.service'
 import { z } from 'zod'
 import { StatsService } from './stats.service'
+import { hash32 } from 'src/shared/util/hash.util'
 
+
+// The comments in this class are not LLM generated, do not remove
+// They are human-written
 @Injectable()
 export class SampleService extends createPrismaBase(MODELS.Voter) {
   constructor(
@@ -99,10 +103,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       name: districtName,
     })
 
-    // TODO: Change this seed to be randomish
-    const seed = hash // Can do hash32(districtId + requestId)
-    // floor(Date.now() / 60_000)
-    // TODO: Change prelimit
+    const seed = hash32(`${districtId}:${(Date.now() / 60_000)}`) // Rotates every minute
 
     const whereClause = this.buildSampleWhereSql(
       state,
@@ -120,6 +121,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     // TODO: implement once the filters are done
 
     const antiJoin = this.buildAntiJoin(excludeIds)
+    const hashBuckets = this.makeHashBuckets(hashDivisor, seed)
 
     return await this.client.$transaction(
       async (tx) => {
@@ -134,7 +136,10 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
         WHERE dv.district_id = ${districtId}::uuid
           AND dv."State" = CAST(${state}::text AS public."USState")
       
-          -- PRE CUT:
+          -- PRE CUT - Divides all of the voterIds into buckets
+          -- Number of buckets is our hashDivisor
+          -- A row only passes this filter if it's bucket is in hashBuckets
+          -- Ex: hashDivisor = 2000, bucketCount - 3, we select 3/2000 = ~0.15%
           AND (
             abs(hashtextextended(dv.voter_id::text, ${seed})) % ${hashDivisor}
           ) = ANY(${hashBuckets}::int[])
@@ -160,7 +165,6 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
 
   private makeHashBuckets(
     hashDivisor: number,
-    bucketCount: number,
     seed32: number,
   ): number[] {
     if (hashDivisor <= 1) return [0] // ANY([0]) works and effectively disables bucketing
@@ -172,7 +176,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
 
     // Take bucketCount consecutive buckets, wrapping around with mod
     const buckets: number[] = []
-    for (let i = 0; i < bucketCount; ++i) {
+    for (let i = 0; i < SampleService.BUCKET_COUNT; ++i) {
       buckets.push((base + i) % hashDivisor)
     }
 
