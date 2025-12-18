@@ -1,11 +1,11 @@
 import { faker } from '@faker-js/faker'
-import { Voter } from '@prisma/client'
+import { Voter, USState } from '@prisma/client'
 import { generateFactory } from './generate'
 
 // we need to match the seed to the gp-api office seed.
 // if you want a different state, you need to update the gp-api office seed.
 // https://github.com/thegoodparty/gp-api/blob/develop/seed/offices.ts
-const states = ['NC']
+const states = ['NC'] as USState[]
 const electionLocation = 'HENDERSONVILLE CITY'
 
 const US_STATES = states
