@@ -35,6 +35,9 @@ export class PrismaService
     url.searchParams.set('connect_timeout', '5')
     // Queries that take longer than 20 seconds will be cancelled.
     url.searchParams.set('socket_timeout', '60')
+    // if (process.env.NODE_ENV === 'perf-local') {
+    //   url.searchParams.set('options', '-c default_transaction_read_only=on')
+    // }
 
     super({
       log: PRISMA_LOG_LEVELS.map((level) => ({
@@ -52,23 +55,19 @@ export class PrismaService
 
   async onModuleInit() {
     if (process.env.NODE_ENV === 'perf-local') {
-      this.$use(async (params, next) => {
-        const blocked = [
-          'create',
-          'createMany',
-          'update',
-          'updateMany',
-          'upsert',
-          'delete',
-          'deleteMany',
-          //'$executeRaw',
-          //'$executeRawUnsafe',
-        ]
-        if (blocked.includes(params.action)) {
-          throw new Error('Writes are disabled in perf-local')
-        }
-        return next(params)
-      })
+      this.$executeRaw = ((..._args: Parameters<PrismaClient['$executeRaw']>) => {
+        throw new Error('Writes are disabled in perf-local')
+      }) as PrismaClient['$executeRaw']
+      // this.$executeRawUnsafe = ((
+      //   ..._args: Parameters<PrismaClient['$executeRawUnsafe']>
+      // ) => {
+      //   throw new Error('Writes are disabled in perf-local')
+      // }) as PrismaClient['$executeRawUnsafe']
+      this.$queryRawUnsafe = ((
+        ..._args: Parameters<PrismaClient['$queryRawUnsafe']>
+      ) => {
+        throw new Error('Raw unsafe queries are disabled in perf-local')
+      }) as PrismaClient['$queryRawUnsafe']
     }
     await this.$connect()
 

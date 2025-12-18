@@ -19,14 +19,6 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
   ) {
     super()
   }
-  // DEFAULTS
-  // p = 0.60
-  // s = 3
-  // K = 3
-  // m = dedupe(excludeIds).length
-  // E = floor(N * p)
-  // m_eff = min(m, E) (district-scoped assumption)
-  // A = E - m_eff
   private static readonly OVERSAMPLE_FACTOR = 3
   private static readonly BUCKET_COUNT = 3
   private static readonly MAX_HASH_DIVISOR = 10000
@@ -39,20 +31,23 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     districtId: string,
     excludeIdsSize: number,
     targetSampleSize: number,
+    hasCellPhone: boolean
   ) {
-    const { totalConstituentsWithCellPhone } =
+    const { totalConstituentsWithCellPhone, totalConstituents } =
       await this.statsService.getTotalCounts(districtId)
     const effectiveExcludeCount = Math.min(
       excludeIdsSize,
       totalConstituentsWithCellPhone,
     )
 
-    const remainingWithPhoneCount =
-      totalConstituentsWithCellPhone - effectiveExcludeCount
+    const remainingConstituentCount =
+      hasCellPhone 
+      ? totalConstituentsWithCellPhone - effectiveExcludeCount
+      : totalConstituents - effectiveExcludeCount
 
-    if (remainingWithPhoneCount < targetSampleSize) {
+    if (remainingConstituentCount < targetSampleSize) {
       throw new BadRequestException(
-        `Not enough non-excluded constituents with cell phones ${remainingWithPhoneCount} to satisfy target: ${targetSampleSize}`,
+        `Not enough non-excluded constituents ${remainingConstituentCount} to satisfy target: ${targetSampleSize}`,
       )
     }
 
@@ -61,7 +56,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       desiredRows * SampleService.MIN_POPULATION_MULTIPLIER
 
     const hashDivisor = Math.floor(
-      (remainingWithPhoneCount * SampleService.BUCKET_COUNT) / desiredRows,
+      (remainingConstituentCount * SampleService.BUCKET_COUNT) / desiredRows,
     )
 
     const prelimit = Math.min(
@@ -70,7 +65,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     )
 
     // TODO: Test this branch and behavior
-    if (remainingWithPhoneCount <= dontBucketCutoff)
+    if (remainingConstituentCount <= dontBucketCutoff)
       return { hashDivisor: SampleService.MIN_HASH_DIVISOR, prelimit }
 
     return {
@@ -92,7 +87,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       electionYear,
       size = 500,
       full = true,
-      hasCellPhone: _hasCellPhone,
+      hasCellPhone = true,
       excludeIds = [],
     } = dto
     // TODO: Need at least one retry fallback in this method
@@ -108,13 +103,14 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     const whereClause = this.buildSampleWhereSql(
       state,
       districtId,
-      _hasCellPhone,
+      hasCellPhone,
       excludeIds,
     )
     const { hashDivisor, prelimit } = await this.computeHashDivisorAndPrelimit(
       districtId,
       excludeIds.length,
       size,
+      hasCellPhone,
     )
 
     const voterSelect = buildVoterSelectSql(full, electionYear, 'v')
@@ -123,12 +119,20 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     const antiJoin = this.buildAntiJoin(excludeIds)
     const hashBuckets = this.makeHashBuckets(hashDivisor, seed)
 
+    this.logger.debug(`
+      Querying for sample buckets.
+      districtId: ${districtId}
+      hashBuckets: ${hashBuckets.toString()}
+      hashDivisor: ${hashDivisor}
+      seed: ${seed}
+      `)
+
     return await this.client.$transaction(
       async (tx) => {
         await tx.$executeRawUnsafe(`
         SET LOCAL plan_cache_mode = force_custom_plan;
       `)
-
+          // TODO: Await this or no?
         return tx.$queryRaw`
       WITH candidate_ids AS (
         SELECT dv.voter_id AS id
@@ -201,8 +205,6 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     excludeIds?: string[],
   ): Prisma.Sql {
     const whereParts: Prisma.Sql[] = [
-      Prisma.sql`dv.district_id = ${districtId}::uuid`,
-      Prisma.sql`dv."State" = CAST(${state}::text AS public."USState")`,
       Prisma.sql`v."State" = CAST(${state}::text AS public."USState")`,
     ]
     if (hasCellPhone === true) {
