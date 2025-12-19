@@ -26,7 +26,11 @@ export const buildVoterFiltersSql = (
         sql = buildFieldFilter('Veteran_Status', op)
         break
       case 'educationLevel':
-        sql = buildFieldFilter('Education_Of_Person', op)
+        sql = buildMappedFieldFilter(
+          'Education_Of_Person',
+          op,
+          VALUE_MAPPERS.educationLevel,
+        )
         break
       case 'ethnicity':
         sql = buildMappedFieldFilter(
@@ -143,6 +147,26 @@ const VALUE_MAPPERS = {
         return 'Non-Partisan'
       case 'Unknown':
         return 'Unknown'
+      default:
+        return value
+    }
+  },
+  educationLevel: (value: string): string | null => {
+    switch (value) {
+      case 'None':
+        return 'Did Not Complete High School Likely'
+      case 'High School Diploma':
+        return 'Completed High School Likely'
+      case 'Technical School':
+        return 'Attended Vocational/Technical School Likely'
+      case 'Some College':
+        return 'Attended But Did Not Complete College Likely'
+      case 'College Degree':
+        return 'Completed College Likely'
+      case 'Graduate Degree':
+        return 'Completed Graduate School Likely'
+      case 'Unknown':
+        return null
       default:
         return value
     }

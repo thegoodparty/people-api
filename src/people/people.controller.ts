@@ -60,7 +60,7 @@ export class PeopleController {
   @Get('stats')
   getStats(@Query() dto: StatsDTO, @Req() req: S2SRequest) {
     this.enforceDistrictOrClaim(dto, req)
-    return {}
+    return this.statsService.getStats(dto)
   }
 
   // keep for backwards compatibility
