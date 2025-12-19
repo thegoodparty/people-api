@@ -50,13 +50,3 @@ export const DEMOGRAPHIC_FILTER_FIELDS: Record<string, FilterFieldMetadata> = {
     type: 'string',
   },
 }
-
-export type FilterIsOperator = 'null' | 'not_null'
-
-export type FieldFilterOps = {
-  eq?: unknown
-  in?: unknown[] | unknown
-  is?: FilterIsOperator
-}
-
-export type DemographicFilter = Record<string, FieldFilterOps>
