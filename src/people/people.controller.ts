@@ -73,8 +73,7 @@ export class PeopleController {
   @Post('sample')
   async samplePeoplePost(@Body() dto: SamplePeopleDTO, @Req() req: S2SRequest) {
     this.enforceDistrictOrClaim(dto, req)
-    const sample = await this.peopleService.samplePeople(dto)
-    return sample
+    return this.peopleService.samplePeople(dto)
   }
 
   @Get('search')
