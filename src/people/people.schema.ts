@@ -121,8 +121,8 @@ const demographicFilterSchema = z.record(fieldOpsSchema)
 
 export const listPeopleSchema = z.object({
   state: stateSchema,
-  districtType: z.string(),
-  districtName: z.string(),
+  districtType: z.string().optional(),
+  districtName: z.string().optional(),
   electionYear: electionYearSchema,
   filters: filtersSchema,
   full: booleanDefault(true),
@@ -181,10 +181,11 @@ export class StatsDTO extends createZodDto(
   }),
 ) {}
 
+// TODO: This should use the state wide override check
 export const samplePeopleSchema = z.object({
   state: stateSchema,
-  districtType: z.string(),
-  districtName: z.string(),
+  districtType: z.string().optional(),
+  districtName: z.string().optional(),
   electionYear: electionYearSchema,
   size: z.coerce.number().int().min(1).max(10000).optional().default(500),
   full: booleanDefault(true),

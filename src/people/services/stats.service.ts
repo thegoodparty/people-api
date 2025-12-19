@@ -33,9 +33,9 @@ export class StatsService extends createPrismaBase(MODELS.DistrictStats) {
 
   async getTotalCounts(districtId: string) {
     // const totalCounts = await this.model.findUnique({
-    //   select: { 
-    //     totalConstituents: true, 
-    //     totalConstituentsWithCellPhone: true 
+    //   select: {
+    //     totalConstituents: true,
+    //     totalConstituentsWithCellPhone: true
     //   },
     //   where: { districtId },
     // })
@@ -53,8 +53,8 @@ export class StatsService extends createPrismaBase(MODELS.DistrictStats) {
     //   totalConstituentsWithCellPhone: 358_617
     // }
     return {
-      totalConstituents: 654_205,
-      totalConstituentsWithCellPhone: 392_523
+      totalConstituents: 14_957_341,
+      totalConstituentsWithCellPhone: 7_478_670,
     }
   }
 }

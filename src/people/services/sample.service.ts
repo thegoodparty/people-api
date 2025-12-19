@@ -8,7 +8,6 @@ import { z } from 'zod'
 import { StatsService } from './stats.service'
 import { hash32 } from 'src/shared/util/hash.util'
 
-
 // The comments in this class are not LLM generated, do not remove
 // They are human-written
 @Injectable()
@@ -31,7 +30,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     districtId: string,
     excludeIdsSize: number,
     targetSampleSize: number,
-    hasCellPhone: boolean
+    hasCellPhone: boolean,
   ) {
     const { totalConstituentsWithCellPhone, totalConstituents } =
       await this.statsService.getTotalCounts(districtId)
@@ -40,8 +39,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       totalConstituentsWithCellPhone,
     )
 
-    const remainingConstituentCount =
-      hasCellPhone 
+    const remainingConstituentCount = hasCellPhone
       ? totalConstituentsWithCellPhone - effectiveExcludeCount
       : totalConstituents - effectiveExcludeCount
 
@@ -82,8 +80,8 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
   ): Promise<Prisma.$VoterPayload[]> {
     const {
       state,
-      districtType,
-      districtName,
+      districtType = '',
+      districtName = '',
       electionYear,
       size = 500,
       full = true,
@@ -92,20 +90,19 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     } = dto
     // TODO: Need at least one retry fallback in this method
 
-    const districtId = await this.districtService.findDistrictId({
-      state,
-      type: districtType,
-      name: districtName,
-    })
+    let districtId = ''
+    if (districtType && districtName) {
+      districtId = await this.districtService.findDistrictId({
+        state,
+        type: districtType,
+        name: districtName,
+      })
+    }
 
-    const seed = hash32(`${districtId}:${(Date.now() / 60_000)}`) // Rotates every minute
+    const seed = hash32(`${districtId}:${Date.now() / 60_000}`) // Rotates every minute
 
-    const whereClause = this.buildSampleWhereSql(
-      state,
-      districtId,
-      hasCellPhone,
-      excludeIds,
-    )
+    const innerWhereClause = this.buildInnerWhereSql(districtId, state)
+    const outerWhereClause = this.buildOuterWhereSql(state, hasCellPhone)
     const { hashDivisor, prelimit } = await this.computeHashDivisorAndPrelimit(
       districtId,
       excludeIds.length,
@@ -132,13 +129,12 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
         await tx.$executeRawUnsafe(`
         SET LOCAL plan_cache_mode = force_custom_plan;
       `)
-          // TODO: Await this or no?
+        // TODO: Await this or no?
         return tx.$queryRaw`
       WITH candidate_ids AS (
         SELECT dv.voter_id AS id
         FROM green."DistrictVoter" dv
-        WHERE dv.district_id = ${districtId}::uuid
-          AND dv."State" = CAST(${state}::text AS public."USState")
+          ${innerWhereClause}
       
           -- PRE CUT - Divides all of the voterIds into buckets
           -- Number of buckets is our hashDivisor
@@ -157,7 +153,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       FROM candidate_ids c
       JOIN green."Voter" v
         ON v.id = c.id
-      ${whereClause}
+      ${outerWhereClause}
       LIMIT ${size};
       `
       },
@@ -167,10 +163,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     )
   }
 
-  private makeHashBuckets(
-    hashDivisor: number,
-    seed32: number,
-  ): number[] {
+  private makeHashBuckets(hashDivisor: number, seed32: number): number[] {
     if (hashDivisor <= 1) return [0] // ANY([0]) works and effectively disables bucketing
 
     // Pick a starting bucket index in the valid range [0, hashDivisor-1]
@@ -198,11 +191,9 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     `
   }
 
-  private buildSampleWhereSql(
+  private buildOuterWhereSql(
     state: string,
-    districtId: string,
     hasCellPhone?: boolean,
-    excludeIds?: string[],
   ): Prisma.Sql {
     const whereParts: Prisma.Sql[] = [
       Prisma.sql`v."State" = CAST(${state}::text AS public."USState")`,
@@ -218,6 +209,23 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     }
 
     return Prisma.sql`WHERE ${Prisma.join(whereParts, ' AND ')}`
+  }
+
+  private buildInnerWhereSql(districtId: string, state: string): Prisma.Sql {
+    const whereParts: Prisma.Sql[] = []
+    if (districtId && state) {
+      whereParts.push(Prisma.sql`dv.district_id = ${districtId}::uuid`)
+      whereParts.push(
+        Prisma.sql`dv."State" = CAST(${state}::text AS public."USState")`,
+      )
+    } else if (state) {
+      whereParts.push(
+        Prisma.sql`dv."State" = CAST(${state}::text AS public."USState")`,
+      )
+    }
+    return whereParts.length > 0
+      ? Prisma.sql`WHERE ${Prisma.join(whereParts, ' AND ')}`
+      : Prisma.sql`WHERE TRUE`
   }
 
   private buildVoterSelect(

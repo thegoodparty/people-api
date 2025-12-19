@@ -71,9 +71,9 @@ export class PeopleController {
 
   // Post to allow large arrays of excludeIds in the body
   @Post('sample')
-  async samplePeoplePost(@Body() dto: SamplePeopleDTO) {
+  async samplePeoplePost(@Body() dto: SamplePeopleDTO, @Req() req: S2SRequest) {
+    this.enforceDistrictOrClaim(dto, req)
     const sample = await this.peopleService.samplePeople(dto)
-    console.log('sampleSize: ', sample.length)
     return sample
   }
 
