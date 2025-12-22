@@ -76,7 +76,7 @@ export const buildVoterFiltersSql = (
         )
         break
       case 'gender':
-        sql = buildGenderFilter(op)
+        sql = buildMappedFieldFilter('Gender', op, VALUE_MAPPERS.gender)
         break
       case 'ageInt':
         sql = buildNumericFilter('Age_Int', op)
@@ -171,6 +171,18 @@ const VALUE_MAPPERS = {
         return value
     }
   },
+  gender: (value: string): string | null => {
+    switch (value) {
+      case 'M':
+        return 'M'
+      case 'F':
+        return 'F'
+      case 'Unknown':
+        return null
+      default:
+        return value
+    }
+  },
 } as const
 
 const buildBusinessOwnerFilter = (
@@ -235,27 +247,6 @@ const buildLanguageFilter = (
     return Prisma.sql`v."Language_Code" = 'Spanish'`
   } else if (hasOther) {
     return Prisma.sql`v."Language_Code" != ALL(ARRAY['English', 'Spanish']::text[])`
-  }
-
-  return null
-}
-
-const buildGenderFilter = (
-  op: FilterOperator | undefined,
-): Prisma.Sql | null => {
-  if (!op) return null
-
-  if (op.operator === 'in' && op.values && op.values.length > 0) {
-    return Prisma.sql`v."Gender" = ANY(ARRAY[${Prisma.join(
-      op.values.map((f) => Prisma.sql`${String(f)}`),
-      ', ',
-    )}]::text[])`
-  } else if (op.operator === 'eq' && op.value) {
-    return Prisma.sql`v."Gender" = ${String(op.value)}`
-  } else if (op.operator === 'is' && op.value === 'not_null') {
-    return Prisma.sql`v."Gender" IS NOT NULL`
-  } else if (op.operator === 'is' && op.value === 'null') {
-    return Prisma.sql`(v."Gender" IS NULL OR v."Gender" = '')`
   }
 
   return null

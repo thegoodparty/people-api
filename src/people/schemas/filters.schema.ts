@@ -82,7 +82,7 @@ export const FILTER_VALUE_ENUMS = {
   businessOwner: ['Yes', 'Unknown'] as const,
   presenceOfChildren: ['Yes', 'No', 'Unknown'] as const,
   homeowner: ['Yes', 'Likely', 'No', 'Unknown'] as const,
-  gender: ['M', 'F'] as const,
+  gender: ['M', 'F', 'Unknown'] as const,
   language: ['English', 'Spanish', 'Other'] as const,
 } as const
 
