@@ -47,7 +47,7 @@ export const createNumericFilterSchema = () => {
         data.gte,
         data.lte,
         data.is,
-      ].filter(Boolean).length
+      ].filter((value) => value !== undefined).length
       return operatorCount >= 1
     }, 'At least one operator must be specified')
 }
@@ -81,6 +81,10 @@ export const transformFilters = <T extends string>(
       if (value === true) {
         filterList.push(key as T)
         filterOperators[key] = { operator: 'is', value: 'not_null' }
+      } else if (value === false) {
+        filterList.push(key as T)
+        filterOperators[key] = { operator: 'is', value: 'null' }
+        filterValues[key] = []
       }
     } else if (
       value &&

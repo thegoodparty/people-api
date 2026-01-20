@@ -20,10 +20,18 @@ export const buildVoterFiltersSql = (
         sql = buildBooleanFilter('VoterTelephones_LandlineFormatted', op)
         break
       case 'maritalStatus':
-        sql = buildFieldFilter('Marital_Status', op)
+        sql = buildMappedFieldFilter(
+          'Marital_Status',
+          op,
+          VALUE_MAPPERS.maritalStatus,
+        )
         break
       case 'veteranStatus':
-        sql = buildFieldFilter('Veteran_Status', op)
+        sql = buildMappedFieldFilter(
+          'Veteran_Status',
+          op,
+          VALUE_MAPPERS.veteranStatus,
+        )
         break
       case 'educationLevel':
         sql = buildMappedFieldFilter(
@@ -183,6 +191,32 @@ const VALUE_MAPPERS = {
         return value
     }
   },
+  veteranStatus: (value: string): string | null => {
+    switch (value) {
+      case 'Yes':
+        return 'Yes'
+      case 'Unknown':
+        return null
+      default:
+        return value
+    }
+  },
+  maritalStatus: (value: string): string | null => {
+    switch (value) {
+      case 'Inferred Married':
+        return 'Inferred Married'
+      case 'Inferred Single':
+        return 'Inferred Single'
+      case 'Married':
+        return 'Married'
+      case 'Single':
+        return 'Single'
+      case 'Unknown':
+        return null
+      default:
+        return value
+    }
+  },
 } as const
 
 const buildBusinessOwnerFilter = (
@@ -219,6 +253,12 @@ const buildLanguageFilter = (
   op: FilterOperator | undefined,
 ): Prisma.Sql | null => {
   if (!op) return null
+
+  if (op.operator === 'is' && op.value === 'not_null') {
+    return Prisma.sql`v."Language_Code" IS NOT NULL`
+  } else if (op.operator === 'is' && op.value === 'null') {
+    return Prisma.sql`v."Language_Code" IS NULL`
+  }
 
   const languageValues =
     op.operator === 'in' && op.values
