@@ -39,15 +39,15 @@ export class PeopleController {
     private readonly statsService: StatsService,
   ) {}
 
-  @Get()
-  listPeople(@Query() filterDto: ListPeopleDTO, @Req() req: S2SRequest) {
+  @Post()
+  listPeople(@Body() filterDto: ListPeopleDTO, @Req() req: S2SRequest) {
     this.enforceDistrictOrClaim(filterDto, req)
     return this.peopleService.findPeople(filterDto)
   }
 
-  @Get('download')
+  @Post('download')
   async downloadPeople(
-    @Query() dto: DownloadPeopleDTO,
+    @Body() dto: DownloadPeopleDTO,
     @Req() req: S2SRequest,
     @Res() res: FastifyReply,
   ) {
