@@ -34,9 +34,9 @@ export class PrismaService
     url.searchParams.set('connect_timeout', '5')
     // Queries that take longer than 60 seconds will be cancelled.
     url.searchParams.set('socket_timeout', '60')
-    // if (process.env.NODE_ENV === 'perf-local') {
-    //   url.searchParams.set('options', '-c default_transaction_read_only=on')
-    // }
+    if (process.env.NODE_ENV === 'perf-local') {
+      url.searchParams.set('options', '-c default_transaction_read_only=on')
+    }
 
     super({
       log: PRISMA_LOG_LEVELS.map((level) => ({
