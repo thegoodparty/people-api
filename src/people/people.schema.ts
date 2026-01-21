@@ -181,7 +181,6 @@ export class StatsDTO extends createZodDto(
   }),
 ) { }
 
-// TODO: This should use the state wide override check
 export const samplePeopleSchema = z
   .object({
     state: stateSchema,

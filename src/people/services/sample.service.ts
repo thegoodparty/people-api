@@ -87,7 +87,6 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       hasCellPhone = true,
       excludeIds = [],
     } = dto
-    // TODO: Need at least one retry fallback in this method
 
     let districtId = ''
     if (districtType && districtName) {
