@@ -331,30 +331,36 @@ const buildNumericFilter = (
 ): Prisma.Sql | null => {
   if (!op) return null
 
+  let baseSql: Prisma.Sql | null = null
+
   if (op.operator === 'in' && op.values && op.values.length > 0) {
-    return Prisma.sql`v."${Prisma.raw(fieldName)}" = ANY(ARRAY[${Prisma.join(
+    baseSql = Prisma.sql`v."${Prisma.raw(fieldName)}" = ANY(ARRAY[${Prisma.join(
       op.values.map((f) => Prisma.sql`${Number(f)}`),
       ', ',
     )}]::integer[])`
   } else if (op.operator === 'eq' && op.value !== undefined) {
-    return Prisma.sql`v."${Prisma.raw(fieldName)}" = ${Number(op.value)}`
+    baseSql = Prisma.sql`v."${Prisma.raw(fieldName)}" = ${Number(op.value)}`
   } else if (
     op.operator === 'range' &&
     op.gte !== undefined &&
     op.lte !== undefined
   ) {
-    return Prisma.sql`v."${Prisma.raw(fieldName)}" >= ${Number(op.gte)} AND v."${Prisma.raw(fieldName)}" <= ${Number(op.lte)}`
+    baseSql = Prisma.sql`v."${Prisma.raw(fieldName)}" >= ${Number(op.gte)} AND v."${Prisma.raw(fieldName)}" <= ${Number(op.lte)}`
   } else if (op.operator === 'gte' && op.value !== undefined) {
-    return Prisma.sql`v."${Prisma.raw(fieldName)}" >= ${Number(op.value)}`
+    baseSql = Prisma.sql`v."${Prisma.raw(fieldName)}" >= ${Number(op.value)}`
   } else if (op.operator === 'lte' && op.value !== undefined) {
-    return Prisma.sql`v."${Prisma.raw(fieldName)}" <= ${Number(op.value)}`
+    baseSql = Prisma.sql`v."${Prisma.raw(fieldName)}" <= ${Number(op.value)}`
   } else if (op.operator === 'is' && op.value === 'not_null') {
     return Prisma.sql`v."${Prisma.raw(fieldName)}" IS NOT NULL`
   } else if (op.operator === 'is' && op.value === 'null') {
     return Prisma.sql`v."${Prisma.raw(fieldName)}" IS NULL`
   }
 
-  return null
+  if (baseSql && op.includeNull) {
+    return Prisma.sql`(${baseSql} OR v."${Prisma.raw(fieldName)}" IS NULL)`
+  }
+
+  return baseSql
 }
 
 const buildMappedFieldFilter = (
