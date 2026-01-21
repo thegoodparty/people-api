@@ -16,8 +16,7 @@ const PRISMA_LOG_LEVELS = [
 @Injectable()
 export class PrismaService
   extends PrismaClient<Prisma.PrismaClientOptions, 'query'>
-  implements OnModuleInit, OnModuleDestroy
-{
+  implements OnModuleInit, OnModuleDestroy {
   private logger = new Logger(PrismaService.name)
 
   constructor() {
@@ -33,7 +32,7 @@ export class PrismaService
     url.searchParams.set('connection_limit', '25')
     url.searchParams.set('pool_timeout', '5')
     url.searchParams.set('connect_timeout', '5')
-    // Queries that take longer than 20 seconds will be cancelled.
+    // Queries that take longer than 60 seconds will be cancelled.
     url.searchParams.set('socket_timeout', '60')
     // if (process.env.NODE_ENV === 'perf-local') {
     //   url.searchParams.set('options', '-c default_transaction_read_only=on')
@@ -55,7 +54,9 @@ export class PrismaService
 
   async onModuleInit() {
     if (process.env.NODE_ENV === 'perf-local') {
-      this.$executeRaw = ((..._args: Parameters<PrismaClient['$executeRaw']>) => {
+      this.$executeRaw = ((
+        ..._args: Parameters<PrismaClient['$executeRaw']>
+      ) => {
         throw new Error('Writes are disabled in perf-local')
       }) as PrismaClient['$executeRaw']
       // this.$executeRawUnsafe = ((

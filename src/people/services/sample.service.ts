@@ -129,7 +129,6 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
         await tx.$executeRawUnsafe(`
         SET LOCAL plan_cache_mode = force_custom_plan;
       `)
-        // TODO: Await this or no?
         return tx.$queryRaw`
       WITH candidate_ids AS (
         SELECT dv.voter_id AS id
