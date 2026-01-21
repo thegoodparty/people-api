@@ -114,8 +114,59 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     // TODO: implement once the filters are done
 
     const antiJoin = this.buildAntiJoin(excludeIds)
-    const hashBuckets = this.makeHashBuckets(hashDivisor, seed)
+    const result = await this.runSampleQuery({
+      districtId,
+      seed,
+      hashDivisor,
+      innerWhereClause,
+      outerWhereClause,
+      antiJoin,
+      prelimit,
+      voterSelect,
+      size,
+    })
+    if (result.length < size) {
+      this.logger.warn(`Sampling retry activated for district: ${districtId}`)
+      const retrySeed = (seed + 1) >>> 0
+      const retryResult = await this.runSampleQuery({
+        districtId,
+        seed: retrySeed,
+        hashDivisor,
+        innerWhereClause,
+        outerWhereClause,
+        antiJoin,
+        prelimit,
+        voterSelect,
+        size,
+      })
+      return retryResult
+    }
+    return result
+  }
 
+  private async runSampleQuery(args: {
+    districtId: string
+    seed: number
+    hashDivisor: number
+    innerWhereClause: Prisma.Sql
+    outerWhereClause: Prisma.Sql
+    antiJoin: Prisma.Sql
+    prelimit: number
+    voterSelect: Prisma.Sql
+    size: number
+  }): Promise<Prisma.$VoterPayload[]> {
+    const {
+      districtId,
+      seed,
+      hashDivisor,
+      innerWhereClause,
+      outerWhereClause,
+      antiJoin,
+      prelimit,
+      voterSelect,
+      size,
+    } = args
+    const hashBuckets = this.makeHashBuckets(hashDivisor, seed)
     this.logger.debug(`
       Querying for sample buckets.
       districtId: ${districtId}
@@ -123,8 +174,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       hashDivisor: ${hashDivisor}
       seed: ${seed}
       `)
-
-    return await this.client.$transaction(
+    const rows = (await this.client.$transaction(
       async (tx) => {
         await tx.$executeRawUnsafe(`
         SET LOCAL plan_cache_mode = force_custom_plan;
@@ -159,7 +209,8 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       {
         timeout: 60_000,
       },
-    )
+    )) as Prisma.$VoterPayload[]
+    return rows
   }
 
   private makeHashBuckets(hashDivisor: number, seed32: number): number[] {
