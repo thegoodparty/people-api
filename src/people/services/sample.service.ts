@@ -62,7 +62,6 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       desiredRows * SampleService.PRELIMIT_MULTIPLIER,
     )
 
-    // TODO: Test this branch and behavior
     if (remainingConstituentCount <= dontBucketCutoff)
       return { hashDivisor: SampleService.MIN_HASH_DIVISOR, prelimit }
 

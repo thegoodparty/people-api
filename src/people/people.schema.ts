@@ -39,7 +39,7 @@ const coerceArray = (v: unknown): unknown[] => {
         const normalized = s.replace(/'/g, '"')
         const parsed = JSON.parse(normalized)
         if (Array.isArray(parsed)) return parsed
-      } catch {}
+      } catch { }
     }
     return s ? [s] : []
   }
@@ -131,7 +131,7 @@ export const listPeopleSchema = z.object({
   filter: demographicFilterSchema.optional().default({}),
 })
 
-export class ListPeopleDTO extends createZodDto(listPeopleSchema) {}
+export class ListPeopleDTO extends createZodDto(listPeopleSchema) { }
 
 export const downloadPeopleSchema = z.object({
   state: stateSchema,
@@ -146,7 +146,7 @@ export const downloadPeopleSchema = z.object({
   filter: demographicFilterSchema.optional().default({}),
 })
 
-export class DownloadPeopleDTO extends createZodDto(downloadPeopleSchema) {}
+export class DownloadPeopleDTO extends createZodDto(downloadPeopleSchema) { }
 
 export const searchPeopleSchema = z
   .object({
@@ -171,7 +171,7 @@ export const searchPeopleSchema = z
     'Provide phone or name to search',
   )
 
-export class SearchPeopleDTO extends createZodDto(searchPeopleSchema) {}
+export class SearchPeopleDTO extends createZodDto(searchPeopleSchema) { }
 
 export class StatsDTO extends createZodDto(
   z.object({
@@ -179,18 +179,25 @@ export class StatsDTO extends createZodDto(
     districtType: z.string(),
     districtName: z.string(),
   }),
-) {}
+) { }
 
 // TODO: This should use the state wide override check
-export const samplePeopleSchema = z.object({
-  state: stateSchema,
-  districtType: z.string().optional(),
-  districtName: z.string().optional(),
-  electionYear: electionYearSchema,
-  size: z.coerce.number().int().min(1).max(10000).optional().default(500),
-  full: booleanDefault(true),
-  hasCellPhone: z.coerce.boolean().optional(),
-  excludeIds: z.array(z.string()).optional(),
-})
+export const samplePeopleSchema = z
+  .object({
+    state: stateSchema,
+    districtType: z.string().optional(),
+    districtName: z.string().optional(),
+    electionYear: electionYearSchema,
+    size: z.coerce.number().int().min(1).max(10000).optional().default(500),
+    full: booleanDefault(true),
+    hasCellPhone: z.coerce.boolean().optional(),
+    excludeIds: z.array(z.string()).optional(),
+  })
+  .refine(
+    (v) =>
+      (!!v.districtType && !!v.districtName) ||
+      (!v.districtType && !v.districtName),
+    'districtType and districtName are required together unless a valid statewide claim is present',
+  )
 
-export class SamplePeopleDTO extends createZodDto(samplePeopleSchema) {}
+export class SamplePeopleDTO extends createZodDto(samplePeopleSchema) { }
