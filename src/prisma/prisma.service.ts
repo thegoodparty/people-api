@@ -59,11 +59,6 @@ export class PrismaService
       ) => {
         throw new Error('Writes are disabled in perf-local')
       }) as PrismaClient['$executeRaw']
-      // this.$executeRawUnsafe = ((
-      //   ..._args: Parameters<PrismaClient['$executeRawUnsafe']>
-      // ) => {
-      //   throw new Error('Writes are disabled in perf-local')
-      // }) as PrismaClient['$executeRawUnsafe']
       this.$queryRawUnsafe = ((
         ..._args: Parameters<PrismaClient['$queryRawUnsafe']>
       ) => {
