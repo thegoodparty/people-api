@@ -37,7 +37,7 @@ export class PeopleController {
   constructor(
     private readonly peopleService: PeopleService,
     private readonly statsService: StatsService,
-  ) {}
+  ) { }
 
   @Get()
   listPeople(@Query() filterDto: ListPeopleDTO, @Req() req: S2SRequest) {

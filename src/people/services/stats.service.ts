@@ -51,9 +51,10 @@ export class StatsService extends createPrismaBase(MODELS.DistrictStats) {
     //   totalConstituents: 597_696,
     //   totalConstituentsWithCellPhone: 358_617
     // }
-    // return {
-    //   totalConstituents: 14_957_341,
-    //   totalConstituentsWithCellPhone: 7_478_670,
-    // }
+    // TODO: Dummy counts until we merge with Swain's PR
+    return {
+      totalConstituents: 14_957_341,
+      totalConstituentsWithCellPhone: 7_478_670,
+    }
   }
 }
