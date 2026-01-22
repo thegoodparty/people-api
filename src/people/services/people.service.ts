@@ -220,7 +220,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
 
     const totalResultsPromise = this.rawCountForDistrict({
       state,
-      districtId: resolvedDistrictId as string,
+      districtId: resolvedDistrictId,
       filters,
       electionYear,
     })
@@ -228,7 +228,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     const voterFiltersSql = buildVoterFiltersSql(filters)
     const whereClause = this.rawBuildWhere({
       state,
-      districtId: resolvedDistrictId as string,
+      districtId: resolvedDistrictId,
       voterFiltersSql,
     })
     const voterTable = Prisma.raw(`"${DATABASE_SCHEMA}"."${VOTER_TABLENAME}"`)
@@ -369,7 +369,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
   }
   private rawBuildWhere(args: {
     state: string
-    districtId?: string
+    districtId?: string | null
     search?: {
       phone?: string
       firstName?: string
@@ -442,7 +442,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
 
   private async rawCountForDistrict(args: {
     state: string
-    districtId: string
+    districtId: string | null
     filters: FilterData
     electionYear: number
   }): Promise<number> {
