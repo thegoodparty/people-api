@@ -22,6 +22,10 @@ import { FastifyReply } from 'fastify'
 import { format } from '@fast-csv/format'
 import type { RowMap } from '@fast-csv/format'
 import { DistrictService } from 'src/district/services/district.service'
+import {
+  transformToPersonOutputArray,
+  transformToPersonOutput,
+} from '../utils/transformToPersonOutput.utils'
 
 export const DATABASE_SCHEMA = 'green'
 const VOTER_TABLENAME = 'Voter'
@@ -179,7 +183,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
         hasNextPage: currentPage < totalPages,
         hasPreviousPage: currentPage > 1,
       },
-      people: results,
+      people: transformToPersonOutputArray(results),
     }
   }
 
@@ -267,7 +271,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
         hasNextPage: currentPage < totalPages,
         hasPreviousPage: currentPage > 1,
       },
-      people,
+      people: transformToPersonOutputArray(people),
     }
   }
 
@@ -510,5 +514,9 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       where.AND = andClauses
     }
     return where
+  }
+
+  transformToPersonOutput(person: Record<string, unknown>) {
+    return transformToPersonOutput(person)
   }
 }
