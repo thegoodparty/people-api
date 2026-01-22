@@ -16,7 +16,8 @@ const PRISMA_LOG_LEVELS = [
 @Injectable()
 export class PrismaService
   extends PrismaClient<Prisma.PrismaClientOptions, 'query'>
-  implements OnModuleInit, OnModuleDestroy {
+  implements OnModuleInit, OnModuleDestroy
+{
   private logger = new Logger(PrismaService.name)
 
   constructor() {

@@ -39,7 +39,7 @@ const coerceArray = (v: unknown): unknown[] => {
         const normalized = s.replace(/'/g, '"')
         const parsed = JSON.parse(normalized)
         if (Array.isArray(parsed)) return parsed
-      } catch { }
+      } catch {}
     }
     return s ? [s] : []
   }
@@ -78,7 +78,7 @@ export const listPeopleSchema = z.object({
   page: z.coerce.number().optional().default(1),
 })
 
-export class ListPeopleDTO extends createZodDto(listPeopleSchema) { }
+export class ListPeopleDTO extends createZodDto(listPeopleSchema) {}
 
 export const downloadPeopleSchema = z.object({
   state: stateSchema,
@@ -92,7 +92,7 @@ export const downloadPeopleSchema = z.object({
   full: booleanDefault(true),
 })
 
-export class DownloadPeopleDTO extends createZodDto(downloadPeopleSchema) { }
+export class DownloadPeopleDTO extends createZodDto(downloadPeopleSchema) {}
 
 export const searchPeopleSchema = z
   .object({
@@ -117,7 +117,7 @@ export const searchPeopleSchema = z
     'Provide phone or name to search',
   )
 
-export class SearchPeopleDTO extends createZodDto(searchPeopleSchema) { }
+export class SearchPeopleDTO extends createZodDto(searchPeopleSchema) {}
 
 export class StatsDTO extends createZodDto(
   z.object({
@@ -125,7 +125,7 @@ export class StatsDTO extends createZodDto(
     districtType: z.string(),
     districtName: z.string(),
   }),
-) { }
+) {}
 
 export const samplePeopleSchema = z
   .object({
@@ -145,7 +145,7 @@ export const samplePeopleSchema = z
     'districtType and districtName are required together unless a valid statewide claim is present',
   )
 
-export class SamplePeopleDTO extends createZodDto(samplePeopleSchema) { }
+export class SamplePeopleDTO extends createZodDto(samplePeopleSchema) {}
 
 export type ListPeopleSchema = z.infer<typeof listPeopleSchema>
 export type DownloadPeopleSchema = z.infer<typeof downloadPeopleSchema>

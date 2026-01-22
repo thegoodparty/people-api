@@ -321,7 +321,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
 
     try {
       // pagination loop
-      for (; ;) {
+      for (;;) {
         if (aborted) break
 
         const page = await model.findMany({

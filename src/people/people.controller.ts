@@ -37,7 +37,7 @@ export class PeopleController {
   constructor(
     private readonly peopleService: PeopleService,
     private readonly statsService: StatsService,
-  ) { }
+  ) {}
 
   @Post()
   listPeople(@Body() filterDto: ListPeopleDTO, @Req() req: S2SRequest) {
