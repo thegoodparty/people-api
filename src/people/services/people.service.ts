@@ -325,6 +325,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
 
     const select = this.buildVoterSelect(full, electionYear)
     const selectedColumns = Object.keys(select)
+
     const headers = [...selectedColumns, 'electionLocation', 'electionType']
 
     type ExportRow = RowMap<string | number | null | undefined>
@@ -332,7 +333,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     csvStream.pipe(res.raw)
 
     const pageSize = 5000
-    let offset = 0
+    let lastId: string | undefined
     let aborted = false
 
     const onClose = () => {
@@ -344,16 +345,21 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       for (;;) {
         if (aborted) break
         const page = await this.client.$queryRaw<
-          Array<{
-            [K in keyof typeof select]: string | number | boolean | null
-          }>
+          Array<
+            {
+              __cursor_id: string
+            } & {
+              [K in keyof typeof select]: string | number | boolean | null
+            }
+          >
         >(
           this.buildRawPeopleQuery({
             resolvedDistrictId,
             select,
             whereClause,
             take: pageSize,
-            skip: offset,
+            skip: 0,
+            afterId: lastId,
           }),
         )
         if (!page.length) break
@@ -376,7 +382,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
           }
         }
 
-        offset += page.length
+        lastId = page[page.length - 1].__cursor_id
         if (page.length < pageSize) break
       }
     } finally {
@@ -523,24 +529,34 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     whereClause: Prisma.Sql
     take: number
     skip: number
+    afterId?: string
   }): Prisma.Sql {
-    const { resolvedDistrictId, select, whereClause, take, skip } = args
+    const { resolvedDistrictId, select, whereClause, take, skip, afterId } =
+      args
     const voterTable = Prisma.raw(`"${DATABASE_SCHEMA}"."${VOTER_TABLENAME}"`)
     const dvTable = Prisma.raw(
       `"${DATABASE_SCHEMA}"."${DISTRICTVOTER_TABLENAME}"`,
     )
     const selectKeys = Object.keys(select)
     const selectFields = selectKeys.map((k) => Prisma.raw(`v."${k}"`))
+    const selectWithCursor = [
+      ...selectFields,
+      Prisma.raw(`v."id" AS "__cursor_id"`),
+    ]
     const joinClause = resolvedDistrictId
       ? Prisma.sql`JOIN ${dvTable} dv
             ON v."State" = dv."State" AND v."id" = dv."voter_id"`
       : Prisma.empty
+    const cursorClause = afterId
+      ? Prisma.sql` AND v."id" > ${afterId}::uuid`
+      : Prisma.empty
+    const offsetClause = afterId ? Prisma.empty : Prisma.sql` OFFSET ${skip}`
 
-    return Prisma.sql`SELECT ${Prisma.join(selectFields, ', ')}
+    return Prisma.sql`SELECT ${Prisma.join(selectWithCursor, ', ')}
           FROM ${voterTable} v
           ${joinClause}
-          ${whereClause}
+          ${whereClause}${cursorClause}
           ORDER BY v."id"
-          LIMIT ${take} OFFSET ${skip}`
+          LIMIT ${take}${offsetClause}`
   }
 }
