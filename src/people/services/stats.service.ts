@@ -30,4 +30,20 @@ export class StatsService extends createPrismaBase(MODELS.DistrictStats) {
 
     return stats
   }
+
+  async getTotalCounts(districtId: string) {
+    const totalCounts = await this.model.findUnique({
+      select: {
+        totalConstituents: true,
+        totalConstituentsWithCellPhone: true,
+      },
+      where: { districtId },
+    })
+    if (!totalCounts) {
+      throw new NotFoundException(
+        `District stats not found for districtId=${districtId}`,
+      )
+    }
+    return totalCounts
+  }
 }

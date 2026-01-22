@@ -254,7 +254,6 @@ export const voterFactory = generateFactory<Voter>(() => {
     Residence_Addresses_ZipPlus4: null,
     Residence_HHParties_Description:
       faker.helpers.maybe(() => faker.helpers.arrayElement(PARTIES)) || null,
-    Registered_Voter: true,
     SequenceOddEven: null,
     SequenceZigZag: null,
     StateVoterID:

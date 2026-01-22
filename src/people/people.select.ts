@@ -150,5 +150,5 @@ export function buildVoterSelectSql(
       `${tableAlias}.${quoteIdent(f)} AS ${quoteIdent(f)}`,
     )}`
   })
-  return Prisma.sql`${Prisma.join(cols, ', ')}`
+  return Prisma.sql`SELECT ${Prisma.join(cols, ', ')}`
 }

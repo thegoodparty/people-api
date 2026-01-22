@@ -1,6 +1,50 @@
 import { createZodDto } from 'nestjs-zod'
 import { USState } from '@prisma/client'
 import { z } from 'zod'
+
+const allowedFilters = [
+  'audienceSuperVoters',
+  'audienceLikelyVoters',
+  // TODO: remove this once gp-api change is deployed.
+  'audienceUnreliableVoters',
+  'audienceUnlikelyVoters',
+  'audienceFirstTimeVoters',
+  'audienceUnknown',
+  'partyIndependent',
+  'partyDemocrat',
+  'partyRepublican',
+  'partyUnknown',
+  'age18_25',
+  'age25_35',
+  'age35_50',
+  'age50Plus',
+  'ageUnknown',
+  'genderMale',
+  'genderFemale',
+  'genderUnknown',
+  'incomeUnknown',
+  'audienceRequest',
+  'cellPhoneFormatted',
+  'landlineFormatted',
+] as const
+
+// Accepts: array values, single value, or a JSON-like array string
+// Example supported strings: "[\"a\",\"b\"]" or "['a','b']"
+const coerceArray = (v: unknown): unknown[] => {
+  if (Array.isArray(v)) return v
+  if (typeof v === 'string') {
+    const s = v.trim()
+    if (s.startsWith('[') && s.endsWith(']')) {
+      try {
+        const normalized = s.replace(/'/g, '"')
+        const parsed = JSON.parse(normalized)
+        if (Array.isArray(parsed)) return parsed
+      } catch {}
+    }
+    return s ? [s] : []
+  }
+  return v != null ? [v] : []
+}
 import { filtersSchema } from './schemas/filters.schema'
 
 // ---- Shared atoms to keep schemas DRY ----
@@ -25,8 +69,8 @@ const booleanDefault = (def: boolean) =>
 
 export const listPeopleSchema = z.object({
   state: stateSchema,
-  districtType: z.string(),
-  districtName: z.string(),
+  districtType: z.string().optional(),
+  districtName: z.string().optional(),
   electionYear: electionYearSchema,
   filters: filtersSchema,
   full: booleanDefault(true),
@@ -83,16 +127,23 @@ export class StatsDTO extends createZodDto(
   }),
 ) {}
 
-export const samplePeopleSchema = z.object({
-  state: stateSchema,
-  districtType: z.string(),
-  districtName: z.string(),
-  electionYear: electionYearSchema,
-  size: z.coerce.number().int().min(1).max(10000).optional().default(500),
-  full: booleanDefault(true),
-  hasCellPhone: z.coerce.boolean().optional(),
-  excludeIds: z.array(z.string()).optional(),
-})
+export const samplePeopleSchema = z
+  .object({
+    state: stateSchema,
+    districtType: z.string().optional(),
+    districtName: z.string().optional(),
+    electionYear: electionYearSchema,
+    size: z.coerce.number().int().min(1).max(10000).optional().default(500),
+    full: booleanDefault(true),
+    hasCellPhone: z.coerce.boolean().optional(),
+    excludeIds: z.array(z.string()).optional(),
+  })
+  .refine(
+    (v) =>
+      (!!v.districtType && !!v.districtName) ||
+      (!v.districtType && !v.districtName),
+    'districtType and districtName are required together unless a valid statewide claim is present',
+  )
 
 export class SamplePeopleDTO extends createZodDto(samplePeopleSchema) {}
 

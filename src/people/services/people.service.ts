@@ -190,8 +190,8 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
   async findPeople(dto: ListPeopleDTO) {
     const {
       state,
-      districtType,
-      districtName,
+      districtType = '',
+      districtName = '',
       electionYear,
       resultsPerPage,
       page,
@@ -199,20 +199,23 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       full = true,
     } = dto as ListPeopleSchema
 
-    const resolvedDistrict = await this.districtService.findFirst({
-      where: {
-        type: districtType,
-        name: districtName,
-        state: state as $Enums.DistrictUSState,
-      },
-      select: { id: true },
-    })
-    if (!resolvedDistrict?.id) {
-      throw new NotFoundException(
-        `District not found for state=${state} type=${districtType} name=${districtName}`,
-      )
+    let resolvedDistrictId: string | null = null
+    if (districtName && districtType) {
+      const resolvedDistrict = await this.districtService.findFirst({
+        where: {
+          type: districtType,
+          name: districtName,
+          state: state as $Enums.DistrictUSState,
+        },
+        select: { id: true },
+      })
+      if (!resolvedDistrict?.id) {
+        throw new NotFoundException(
+          `District not found for state=${state} type=${districtType} name=${districtName}`,
+        )
+      }
+      resolvedDistrictId = resolvedDistrict.id
     }
-    const resolvedDistrictId = resolvedDistrict?.id
 
     const take = resultsPerPage
     const skip = (page - 1) * resultsPerPage
@@ -221,7 +224,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
 
     const totalResultsPromise = this.rawCountForDistrict({
       state,
-      districtId: resolvedDistrictId as string,
+      districtId: resolvedDistrictId,
       filters,
       electionYear,
     })
@@ -229,7 +232,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     const voterFiltersSql = buildVoterFiltersSql(filters)
     const whereClause = this.rawBuildWhere({
       state,
-      districtId: resolvedDistrictId as string,
+      districtId: resolvedDistrictId,
       voterFiltersSql,
     })
     const voterTable = Prisma.raw(`"${DATABASE_SCHEMA}"."${VOTER_TABLENAME}"`)
@@ -238,6 +241,10 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     )
     const selectKeys = Object.keys(select)
     const selectFields = selectKeys.map((k) => Prisma.raw(`v."${k}"`))
+    const joinClause = resolvedDistrictId
+      ? Prisma.sql`JOIN ${dvTable} dv
+            ON v."State" = dv."State" AND v."id" = dv."voter_id"`
+      : Prisma.empty
     const [totalResults, people] = await Promise.all([
       totalResultsPromise,
       this.client.$queryRaw<
@@ -247,8 +254,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       >(
         Prisma.sql`SELECT ${Prisma.join(selectFields, ', ')}
           FROM ${voterTable} v
-          JOIN ${dvTable} dv
-            ON v."State" = dv."State" AND v."id" = dv."voter_id"
+          ${joinClause}
           ${whereClause}
           ORDER BY v."id"
           LIMIT ${take} OFFSET ${skip}`,
@@ -367,7 +373,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
   }
   private rawBuildWhere(args: {
     state: string
-    districtId: string
+    districtId?: string | null
     search?: {
       phone?: string
       firstName?: string
@@ -381,11 +387,13 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     parts.push(
       Prisma.sql`v."State" = CAST(${state}::text AS "public"."USState")`,
     )
-    parts.push(
-      Prisma.sql`dv."State" = CAST(${state}::text AS "public"."USState")`,
-    )
-    parts.push(Prisma.sql`dv."district_id" = ${districtId}::uuid`)
-    parts.push(Prisma.sql`dv."voter_id" IS NOT NULL`)
+    if (districtId) {
+      parts.push(
+        Prisma.sql`dv."State" = CAST(${state}::text AS "public"."USState")`,
+      )
+      parts.push(Prisma.sql`dv."district_id" = ${districtId}::uuid`)
+      parts.push(Prisma.sql`dv."voter_id" IS NOT NULL`)
+    }
     if (search) {
       if (search.phone) {
         const digits = (search.phone || '').replace(/\D/g, '')
@@ -438,7 +446,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
 
   private async rawCountForDistrict(args: {
     state: string
-    districtId: string
+    districtId: string | null
     filters: FilterData
     electionYear: number
   }): Promise<number> {
@@ -446,23 +454,42 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
 
     const voterFiltersSql = buildVoterFiltersSql(args.filters)
     if (!voterFiltersSql) {
+      if (districtId) {
+        const rows = await this.client.$queryRaw<{ voter_count: bigint }[]>(
+          Prisma.sql`SELECT COUNT(*)::bigint AS voter_count
+            FROM "green"."DistrictVoter" dv
+            WHERE dv."State" = CAST(${state}::text AS "public"."USState")
+              AND dv."district_id" = ${districtId}::uuid`,
+        )
+        const count = rows[0]?.voter_count ?? 0n
+        return Number(count)
+      }
+      const rows = await this.client.$queryRaw<{ voter_count: bigint }[]>(
+        Prisma.sql`SELECT COUNT(*)::bigint AS voter_count
+          FROM "green"."Voter" v
+          WHERE v."State" = CAST(${state}::text AS "public"."USState")`,
+      )
+      const count = rows[0]?.voter_count ?? 0n
+      return Number(count)
+    }
+    if (districtId) {
       const rows = await this.client.$queryRaw<{ voter_count: bigint }[]>(
         Prisma.sql`SELECT COUNT(*)::bigint AS voter_count
           FROM "green"."DistrictVoter" dv
+          JOIN "green"."Voter" v
+            ON v."State" = dv."State"
+           AND v."id"    = dv."voter_id"
           WHERE dv."State" = CAST(${state}::text AS "public"."USState")
-            AND dv."district_id" = ${districtId}::uuid`,
+            AND dv."district_id" = ${districtId}::uuid
+            AND ${voterFiltersSql}`,
       )
       const count = rows[0]?.voter_count ?? 0n
       return Number(count)
     }
     const rows = await this.client.$queryRaw<{ voter_count: bigint }[]>(
       Prisma.sql`SELECT COUNT(*)::bigint AS voter_count
-        FROM "green"."DistrictVoter" dv
-        JOIN "green"."Voter" v
-          ON v."State" = dv."State"
-         AND v."id"    = dv."voter_id"
-        WHERE dv."State" = CAST(${state}::text AS "public"."USState")
-          AND dv."district_id" = ${districtId}::uuid
+        FROM "green"."Voter" v
+        WHERE v."State" = CAST(${state}::text AS "public"."USState")
           AND ${voterFiltersSql}`,
     )
     const count = rows[0]?.voter_count ?? 0n

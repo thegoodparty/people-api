@@ -44,6 +44,7 @@
     "jsonwebtoken": "^9.0.2",
     "lodash": "^4.17.21",
     "module-alias": "^2.2.3",
+    "murmurhash": "^2.0.1",
     "nestjs-pino": "^4.4.1",
     "nestjs-zod": "^4.3.1",
     "newrelic": "^11.20.0",
