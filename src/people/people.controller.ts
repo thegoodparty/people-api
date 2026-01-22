@@ -92,7 +92,7 @@ export class PeopleController {
       throw new NotFoundException(`Person with ID ${id} not found`)
     }
 
-    return person
+    return this.peopleService.transformToPersonOutput(person)
   }
 
   private enforceDistrictOrClaim(
