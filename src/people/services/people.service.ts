@@ -208,7 +208,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       filter = {},
     } = dto
 
-    let resolvedDistrictId
+    let resolvedDistrictId: string | null = null
     if (districtName && districtType) {
       const resolvedDistrict = await this.districtService.findFirst({
         where: {
@@ -223,7 +223,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
           `District not found for state=${state} type=${districtType} name=${districtName}`,
         )
       }
-      resolvedDistrictId = resolvedDistrict?.id
+      resolvedDistrictId = resolvedDistrict.id
     }
 
     const take = resultsPerPage
@@ -237,7 +237,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
 
     const totalResultsPromise = this.rawCountForDistrict({
       state,
-      districtId: resolvedDistrictId,
+      districtId: resolvedDistrictId as string,
       filters,
       demographicFilter: filter as DemographicFilter,
       electionYear,
@@ -352,7 +352,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
 
     try {
       // pagination loop
-      for (;;) {
+      for (; ;) {
         if (aborted) break
 
         const page = await model.findMany({
