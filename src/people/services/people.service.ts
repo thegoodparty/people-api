@@ -250,7 +250,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     )
     const whereClause = this.rawBuildWhere({
       state,
-      districtId: resolvedDistrictId,
+      districtId: resolvedDistrictId as string,
       voterFiltersSql,
     })
     const voterTable = Prisma.raw(`"${DATABASE_SCHEMA}"."${VOTER_TABLENAME}"`)
