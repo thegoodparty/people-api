@@ -1,4 +1,4 @@
-import { $Enums, Prisma, USState } from '@prisma/client'
+import { $Enums, Prisma } from '@prisma/client'
 import {
   DownloadPeopleDTO,
   ListPeopleDTO,
@@ -67,8 +67,6 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       page,
     } = dto
 
-    const _where: Prisma.VoterWhereInput = {}
-    if (state) _where.State = state as USState
     const districtId =
       districtType && districtName
         ? await this.districtService.findDistrictId({
@@ -79,7 +77,6 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
         : null
 
     const tokens = (name || '').trim().split(/\s+/).filter(Boolean)
-    const hasNameTokens = tokens.length > 0 || firstName || lastName
 
     if (phone) {
       const normalized = this.normalizePhone(phone)
@@ -87,40 +84,6 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
         throw new BadRequestException(
           'Invalid phone number; expected 10 digits',
         )
-      }
-      const formatted = this.formatStoredPhoneFromDigits(normalized)
-      _where.OR = [
-        { VoterTelephones_CellPhoneFormatted: formatted },
-        { VoterTelephones_LandlineFormatted: formatted },
-      ]
-    } else if (hasNameTokens) {
-      const explicitFirst = Boolean(firstName)
-      const explicitLast = Boolean(lastName)
-      const twoTokens = tokens.length > 1
-
-      if ((explicitFirst && explicitLast) || twoTokens) {
-        const fn = firstName ?? tokens[0]
-        const ln = lastName ?? tokens[tokens.length - 1]
-        _where.AND = [
-          { FirstName: { equals: fn, mode: Prisma.QueryMode.default } },
-          { LastName: { equals: ln, mode: Prisma.QueryMode.default } },
-        ]
-      } else {
-        const single = firstName ?? lastName ?? tokens[0]
-        _where.OR = [
-          {
-            FirstName: {
-              equals: single as string,
-              mode: Prisma.QueryMode.default,
-            },
-          },
-          {
-            LastName: {
-              equals: single as string,
-              mode: Prisma.QueryMode.default,
-            },
-          },
-        ]
       }
     }
 
@@ -153,42 +116,40 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       `"${DATABASE_SCHEMA}"."${DISTRICTVOTER_TABLENAME}"`,
     )
     let countRows: { voter_count: bigint }[]
-    if (districtId) {
-      countRows = await this.client.$queryRaw<{ voter_count: bigint }[]>(
-        Prisma.sql`SELECT COUNT(*)::bigint AS voter_count
-        FROM ${voterTable} v
-        JOIN ${dvTable} dv
-          ON v."State" = dv."State" AND v."id" = dv."voter_id"
-        ${whereClause}`,
-      )
-    } else {
-      countRows = await this.client.$queryRaw<{ voter_count: bigint }[]>(
-        Prisma.sql`SELECT COUNT(*)::bigint AS voter_count
-        FROM ${voterTable} v
-        ${whereClause}`,
-      )
-    }
-    const totalResults = Number(countRows[0]?.voter_count ?? 0n)
-    const selectKeys = Object.keys(select)
-    const selectFields = selectKeys.map((k) => Prisma.raw(`v."${k}"`))
+
     let results: Array<{
       [K in keyof typeof select]: string | number | boolean | null
     }>
     if (districtId) {
+      countRows = await this.client.$queryRaw<{ voter_count: bigint }[]>(
+        Prisma.sql`SELECT COUNT(*)::bigint AS voter_count
+        FROM ${voterTable} v
+        JOIN ${dvTable} dv
+          ON v."State" = dv."State" AND v."id" = dv."voter_id"
+        ${whereClause}`,
+      )
       results = await this.client.$queryRaw<
         Array<{
           [K in keyof typeof select]: string | number | boolean | null
         }>
       >(
-        Prisma.sql`SELECT ${Prisma.join(selectFields, ', ')}
-        FROM ${voterTable} v
-        JOIN ${dvTable} dv
-          ON v."State" = dv."State" AND v."id" = dv."voter_id"
-        ${whereClause}
-        ORDER BY v."id"
-        LIMIT ${take} OFFSET ${skip}`,
+        this.buildRawPeopleQuery({
+          districtId,
+          select,
+          whereClause,
+          take,
+          skip,
+          includeCursor: false,
+        }),
       )
     } else {
+      countRows = await this.client.$queryRaw<{ voter_count: bigint }[]>(
+        Prisma.sql`SELECT COUNT(*)::bigint AS voter_count
+        FROM ${voterTable} v
+        ${whereClause}`,
+      )
+      const selectKeys = Object.keys(select)
+      const selectFields = selectKeys.map((k) => Prisma.raw(`v."${k}"`))
       results = await this.client.$queryRaw<
         Array<{
           [K in keyof typeof select]: string | number | boolean | null
@@ -201,6 +162,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
         LIMIT ${take} OFFSET ${skip}`,
       )
     }
+    const totalResults = Number(countRows[0]?.voter_count ?? 0n)
     const totalPages = Math.max(1, Math.ceil(totalResults / resultsPerPage))
     const currentPage = Math.min(Math.max(1, page), totalPages)
     return {
@@ -263,7 +225,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
         }>
       >(
         this.buildRawPeopleQuery({
-          resolvedDistrictId,
+          districtId: resolvedDistrictId,
           select,
           whereClause: this.rawBuildWhere({
             state,
@@ -272,6 +234,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
           }),
           take: resultsPerPage,
           skip: (page - 1) * resultsPerPage,
+          includeCursor: false,
         }),
       ),
     ])
@@ -354,7 +317,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
           >
         >(
           this.buildRawPeopleQuery({
-            resolvedDistrictId,
+            districtId: resolvedDistrictId,
             select,
             whereClause,
             take: pageSize,
@@ -427,10 +390,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
               ? digits
               : null
         if (normalized) {
-          const area = normalized.slice(0, 3)
-          const prefix = normalized.slice(3, 6)
-          const line = normalized.slice(6)
-          const formatted = `(${area}) ${prefix}-${line}`
+          const formatted = this.formatStoredPhoneFromDigits(normalized)
           parts.push(
             Prisma.sql`(v."VoterTelephones_CellPhoneFormatted" = ${formatted} OR v."VoterTelephones_LandlineFormatted" = ${formatted})`,
           )
@@ -524,26 +484,34 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
   }
 
   private buildRawPeopleQuery(args: {
-    resolvedDistrictId: string | null
+    districtId: string | null
     select: Prisma.VoterSelect<DefaultArgs>
     whereClause: Prisma.Sql
     take: number
     skip: number
     afterId?: string
+    includeCursor?: boolean
   }): Prisma.Sql {
-    const { resolvedDistrictId, select, whereClause, take, skip, afterId } =
-      args
+    const {
+      districtId,
+      select,
+      whereClause,
+      take,
+      skip,
+      afterId,
+      includeCursor,
+    } = args
     const voterTable = Prisma.raw(`"${DATABASE_SCHEMA}"."${VOTER_TABLENAME}"`)
     const dvTable = Prisma.raw(
       `"${DATABASE_SCHEMA}"."${DISTRICTVOTER_TABLENAME}"`,
     )
     const selectKeys = Object.keys(select)
     const selectFields = selectKeys.map((k) => Prisma.raw(`v."${k}"`))
-    const selectWithCursor = [
-      ...selectFields,
-      Prisma.raw(`v."id" AS "__cursor_id"`),
-    ]
-    const joinClause = resolvedDistrictId
+    const selectList =
+      includeCursor === false
+        ? selectFields
+        : [...selectFields, Prisma.raw(`v."id" AS "__cursor_id"`)]
+    const joinClause = districtId
       ? Prisma.sql`JOIN ${dvTable} dv
             ON v."State" = dv."State" AND v."id" = dv."voter_id"`
       : Prisma.empty
@@ -552,7 +520,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       : Prisma.empty
     const offsetClause = afterId ? Prisma.empty : Prisma.sql` OFFSET ${skip}`
 
-    return Prisma.sql`SELECT ${Prisma.join(selectWithCursor, ', ')}
+    return Prisma.sql`SELECT ${Prisma.join(selectList, ', ')}
           FROM ${voterTable} v
           ${joinClause}
           ${whereClause}${cursorClause}
