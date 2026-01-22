@@ -1,6 +1,6 @@
 model DistrictStats {
   districtId                     String   @id @map("district_id")
-  computedAt                     DateTime @map("computed_at")
+  updatedAt                      DateTime @map("updated_at")
   totalConstituents              Int      @map("total_constituents")
   totalConstituentsWithCellPhone Int      @map("total_constituents_with_cell_phone")
 

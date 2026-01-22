@@ -45,6 +45,7 @@ const coerceArray = (v: unknown): unknown[] => {
   }
   return v != null ? [v] : []
 }
+import { filtersSchema } from './schemas/filters.schema'
 
 // ---- Shared atoms to keep schemas DRY ----
 const stateSchema = z.preprocess(
@@ -66,59 +67,6 @@ const booleanDefault = (def: boolean) =>
     .optional()
     .default(def)
 
-const legacyToCamel: Record<string, (typeof allowedFilters)[number]> = {
-  audience_superVoters: 'audienceSuperVoters',
-  audience_likelyVoters: 'audienceLikelyVoters',
-  audience_unreliableVoters: 'audienceUnreliableVoters',
-  audience_unlikelyVoters: 'audienceUnlikelyVoters',
-  audience_firstTimeVoters: 'audienceFirstTimeVoters',
-  audience_unknown: 'audienceUnknown',
-  party_independent: 'partyIndependent',
-  party_democrat: 'partyDemocrat',
-  party_republican: 'partyRepublican',
-  party_unknown: 'partyUnknown',
-  age_18_25: 'age18_25',
-  age_25_35: 'age25_35',
-  age_35_50: 'age35_50',
-  age_50_plus: 'age50Plus',
-  age_unknown: 'ageUnknown',
-  gender_male: 'genderMale',
-  gender_female: 'genderFemale',
-  gender_unknown: 'genderUnknown',
-  income_unknown: 'incomeUnknown',
-  audience_request: 'audienceRequest',
-  voterTelephones_CellPhoneFormatted: 'cellPhoneFormatted',
-  voterTelephones_LandlineFormatted: 'landlineFormatted',
-}
-
-const preprocessFilters = (v: unknown) => {
-  const values = coerceArray(v)
-  return values.map((raw) => {
-    const s = String(raw)
-    return (
-      (legacyToCamel[s] as (typeof allowedFilters)[number]) ?? (s as unknown)
-    )
-  })
-}
-
-const filtersSchema = z
-  .preprocess(preprocessFilters, z.array(z.enum(allowedFilters)))
-  .optional()
-  .default([])
-
-const fieldOpsSchema = z.object({
-  eq: z.union([z.string(), z.boolean()]).optional(),
-  in: z
-    .preprocess(
-      (v) => coerceArray(v),
-      z.array(z.union([z.string(), z.boolean()])),
-    )
-    .optional(),
-  is: z.enum(['null', 'not_null']).optional(),
-})
-
-const demographicFilterSchema = z.record(fieldOpsSchema)
-
 export const listPeopleSchema = z.object({
   state: stateSchema,
   districtType: z.string().optional(),
@@ -128,7 +76,6 @@ export const listPeopleSchema = z.object({
   full: booleanDefault(true),
   resultsPerPage: z.coerce.number().optional().default(50),
   page: z.coerce.number().optional().default(1),
-  filter: demographicFilterSchema.optional().default({}),
 })
 
 export class ListPeopleDTO extends createZodDto(listPeopleSchema) { }
@@ -143,7 +90,6 @@ export const downloadPeopleSchema = z.object({
   electionYear: electionYearSchema,
   filters: filtersSchema,
   full: booleanDefault(true),
-  filter: demographicFilterSchema.optional().default({}),
 })
 
 export class DownloadPeopleDTO extends createZodDto(downloadPeopleSchema) { }
@@ -200,3 +146,6 @@ export const samplePeopleSchema = z
   )
 
 export class SamplePeopleDTO extends createZodDto(samplePeopleSchema) { }
+
+export type ListPeopleSchema = z.infer<typeof listPeopleSchema>
+export type DownloadPeopleSchema = z.infer<typeof downloadPeopleSchema>

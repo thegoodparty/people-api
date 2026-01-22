@@ -280,8 +280,6 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     full: boolean,
     electionYear: number,
   ): Prisma.VoterSelect {
-    // TODO: You decide @Stephen what columns we should return here,
-    // we might need a special case to return all since we don't filter sampling based on demographic filters
-    return buildVoterSelect(full, electionYear, {})
+    return buildVoterSelect(full, electionYear)
   }
 }

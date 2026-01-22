@@ -7,12 +7,11 @@ import {
   PrimaryYearKey,
   YearSelectKey,
 } from './people.types'
-import { DEMOGRAPHIC_FILTER_FIELDS, DemographicFilter } from './people.filters'
+import { DEMOGRAPHIC_FILTER_FIELDS } from './people.demographics'
 
 export function buildVoterSelect(
   full: boolean,
   electionYear: number,
-  _demographicFilter: DemographicFilter,
 ): Prisma.VoterSelect {
   const isEvenYear = electionYear % 2 === 0
   if (full) {

@@ -4,33 +4,24 @@ import {
   ListPeopleDTO,
   SamplePeopleDTO,
   SearchPeopleDTO,
+  ListPeopleSchema,
+  DownloadPeopleSchema,
 } from '../people.schema'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
 import { SampleService } from './sample.service'
-import {
-  DEMOGRAPHIC_FILTER_FIELDS,
-  DemographicFilter,
-  FieldFilterOps,
-} from '../people.filters'
+
 import { buildVoterSelect } from '../people.select'
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
-import { AllowedFilter } from '../people.types'
+import { FilterData } from '../schemas/filters.schema'
+import { buildVoterFiltersSql } from '../utils/filters.sql.utils'
 import { FastifyReply } from 'fastify'
 import { format } from '@fast-csv/format'
 import type { RowMap } from '@fast-csv/format'
 import { DistrictService } from 'src/district/services/district.service'
-
-const filterToVoterStatusMap: Partial<Record<AllowedFilter, string>> = {
-  audienceUnknown: 'Unknown',
-  audienceFirstTimeVoters: 'First Time',
-  audienceLikelyVoters: 'Likely',
-  audienceUnlikelyVoters: 'Unlikely',
-  audienceSuperVoters: 'Super',
-}
 
 export const DATABASE_SCHEMA = 'green'
 const VOTER_TABLENAME = 'Voter'
@@ -44,9 +35,6 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
   ) {
     super()
   }
-  private static readonly MAX_FIELDS = 15
-  private static readonly API_FIELD_MAX_CHARS = 100
-  private static readonly API_FIELD_MAX_VALUES = 50
 
   private normalizePhone(input: string): string | null {
     const digits = (input || '').replace(/\D/g, '')
@@ -203,10 +191,9 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       electionYear,
       resultsPerPage,
       page,
-      filters = [],
+      filters,
       full = true,
-      filter = {},
-    } = dto
+    } = dto as ListPeopleSchema
 
     let resolvedDistrictId: string | null = null
     if (districtName && districtType) {
@@ -229,25 +216,16 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     const take = resultsPerPage
     const skip = (page - 1) * resultsPerPage
 
-    const select = this.buildVoterSelect(
-      full,
-      electionYear,
-      filter as DemographicFilter,
-    )
+    const select = this.buildVoterSelect(full, electionYear)
 
     const totalResultsPromise = this.rawCountForDistrict({
       state,
       districtId: resolvedDistrictId as string,
       filters,
-      demographicFilter: filter as DemographicFilter,
       electionYear,
     })
 
-    const voterFiltersSql = this.buildVoterFiltersSql(
-      filters,
-      electionYear,
-      filter as DemographicFilter,
-    )
+    const voterFiltersSql = buildVoterFiltersSql(filters)
     const whereClause = this.rawBuildWhere({
       state,
       districtId: resolvedDistrictId as string,
@@ -298,9 +276,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       state,
       electionYear = new Date().getFullYear(),
       full = true,
-      filter = {},
-      filters = [],
-    } = dto
+    } = dto as DownloadPeopleSchema
 
     const districtType = dto.districtType as keyof Prisma.VoterWhereInput
     const districtName = dto.districtName
@@ -319,20 +295,13 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     }
     const resolvedDistrictId = resolvedDistrict?.id
 
-    // TODO: Make sure this works @Stephen
-    const where = this.buildWhereSql({
+    // TODO: @Nikao, connect once new filters are there
+    const where = this.temporaryBuildWhereSql({
       state,
       districtId: resolvedDistrictId,
-      filters,
-      demographicFilter: filter as DemographicFilter,
-      electionYear,
     })
 
-    const select = this.buildVoterSelect(
-      full,
-      electionYear,
-      filter as DemographicFilter,
-    )
+    const select = this.buildVoterSelect(full, electionYear)
     const selectedColumns = Object.keys(select)
     const headers = [...selectedColumns, 'electionLocation', 'electionType']
 
@@ -467,295 +436,19 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
   private buildVoterSelect(
     full: boolean,
     electionYear: number,
-    demographicFilter: DemographicFilter,
   ): Prisma.VoterSelect {
-    return buildVoterSelect(full, electionYear, demographicFilter)
-  }
-
-  // DEPRECATED, left just as a reference to some of the logic Stephen is translating to raw SQL
-  // TODO: Remove @Stephen when done
-  private buildWhereSql(options: {
-    state: string
-    districtId?: string | undefined
-    filters: AllowedFilter[]
-    demographicFilter: DemographicFilter
-    electionYear: number
-  }): Prisma.VoterWhereInput {
-    const { state, districtId, filters, demographicFilter, electionYear } =
-      options
-    const where: Prisma.VoterWhereInput = { State: state as USState }
-
-    if (districtId) {
-      const andClauses: Prisma.VoterWhereInput[] = []
-      if (where.AND) {
-        andClauses.push(...(Array.isArray(where.AND) ? where.AND : [where.AND]))
-      }
-      andClauses.push({
-        DistrictLinks: { some: { districtId, state: state as USState } },
-      })
-      where.AND = andClauses
-    }
-
-    // genders
-    const genderValues: string[] = []
-    const includeNullGender = filters.includes('genderUnknown')
-    if (filters.includes('genderMale')) genderValues.push('M')
-    if (filters.includes('genderFemale')) genderValues.push('F')
-    if (filters.includes('genderUnknown')) genderValues.push('')
-
-    if (genderValues.length || includeNullGender) {
-      const genderConditions: Prisma.VoterWhereInput[] = []
-      if (genderValues.length) {
-        genderConditions.push({ Gender: { in: genderValues } })
-      }
-      if (includeNullGender) {
-        genderConditions.push({ Gender: null })
-      }
-      if (genderConditions.length === 1) {
-        Object.assign(where, genderConditions[0])
-      } else {
-        const andClauses: Prisma.VoterWhereInput[] = []
-        if (where.AND) {
-          andClauses.push(
-            ...(Array.isArray(where.AND) ? where.AND : [where.AND]),
-          )
-        }
-        andClauses.push({ OR: genderConditions })
-        where.AND = andClauses
-      }
-    }
-
-    const wantsDemocratic = filters.includes('partyDemocrat')
-    const wantsRepublican = filters.includes('partyRepublican')
-    const wantsIndependentOrOther = filters.includes('partyIndependent')
-    const wantsUnknown = filters.includes('partyUnknown')
-
-    if (
-      wantsDemocratic ||
-      wantsRepublican ||
-      wantsIndependentOrOther ||
-      wantsUnknown
-    ) {
-      // Build an OR of acceptable party conditions to correctly support
-      // "independent" meaning everything that is NOT Democratic/Republican,
-      // and combinations like Republican + Independent => exclude Democrats.
-      const partyOrClauses: Prisma.VoterWhereInput[] = []
-
-      // Explicit party inclusions (case-insensitive)
-      if (wantsDemocratic) {
-        partyOrClauses.push({
-          Parties_Description: { equals: 'Democratic', mode: 'insensitive' },
-        })
-      }
-      if (wantsRepublican) {
-        partyOrClauses.push({
-          Parties_Description: { equals: 'Republican', mode: 'insensitive' },
-        })
-      }
-
-      // Independent means: anything non-null and non-empty except Democratic or Republican (case-insensitive)
-      if (wantsIndependentOrOther) {
-        partyOrClauses.push({
-          AND: [
-            {
-              NOT: {
-                Parties_Description: {
-                  equals: 'Democratic',
-                  mode: 'insensitive',
-                },
-              },
-            },
-            {
-              NOT: {
-                Parties_Description: {
-                  equals: 'Republican',
-                  mode: 'insensitive',
-                },
-              },
-            },
-            { Parties_Description: { not: '' } },
-            { Parties_Description: { not: null } },
-          ],
-        })
-      }
-
-      // Unknown party means null or empty string
-      if (wantsUnknown) {
-        partyOrClauses.push({
-          OR: [{ Parties_Description: null }, { Parties_Description: '' }],
-        })
-      }
-
-      // If all four were selected, this effectively means "everyone"; in that
-      // case we can skip adding a filter altogether. Otherwise apply OR.
-      const selectsAll =
-        wantsDemocratic &&
-        wantsRepublican &&
-        wantsIndependentOrOther &&
-        wantsUnknown
-      if (!selectsAll && partyOrClauses.length) {
-        const andClauses: Prisma.VoterWhereInput[] = []
-        if (where.AND) {
-          andClauses.push(
-            ...(Array.isArray(where.AND) ? where.AND : [where.AND]),
-          )
-        }
-        andClauses.push({ OR: partyOrClauses })
-        where.AND = andClauses
-      }
-    }
-
-    // age buckets on indexed integer column
-    const usesAge = filters.some((f) =>
-      ['age18_25', 'age25_35', 'age35_50', 'age50Plus', 'ageUnknown'].includes(
-        f,
-      ),
-    )
-    if (usesAge) {
-      type AgeClause = Prisma.VoterWhereInput & {
-        Age_Int?: Prisma.IntNullableFilter
-      }
-      const ageOr: AgeClause[] = []
-      if (filters.includes('age18_25'))
-        ageOr.push({ Age_Int: { gte: 18, lte: 25 } })
-      if (filters.includes('age25_35'))
-        ageOr.push({ Age_Int: { gt: 25, lte: 35 } })
-      if (filters.includes('age35_50'))
-        ageOr.push({ Age_Int: { gt: 35, lte: 50 } })
-      if (filters.includes('age50Plus')) ageOr.push({ Age_Int: { gt: 50 } })
-      if (filters.includes('ageUnknown')) ageOr.push({ Age_Int: null as never })
-      if (ageOr.length) {
-        const andClauses: Prisma.VoterWhereInput[] = []
-        if (where.AND) {
-          andClauses.push(
-            ...(Array.isArray(where.AND) ? where.AND : [where.AND]),
-          )
-        }
-        andClauses.push({ OR: ageOr })
-        where.AND = andClauses
-      }
-    }
-
-    // phones
-    if (filters.includes('cellPhoneFormatted')) {
-      where.VoterTelephones_CellPhoneFormatted = { not: null }
-    }
-    if (filters.includes('landlineFormatted')) {
-      where.VoterTelephones_LandlineFormatted = { not: null }
-    }
-
-    const voterStatusFilters = filters
-      .map((filter) => filterToVoterStatusMap[filter] || '')
-      .filter(Boolean)
-    if (voterStatusFilters.length) {
-      const andClauses: Prisma.VoterWhereInput[] = []
-      if (where.AND) {
-        andClauses.push(...(Array.isArray(where.AND) ? where.AND : [where.AND]))
-      }
-      andClauses.push({ Voter_Status: { in: voterStatusFilters } })
-      where.AND = andClauses
-    }
-
-    // demographic filter translation
-    // const demographicWhere = this.translateDemographicFilter(
-    //   demographicFilter,
-    //   electionYear,
-    // )
-    // if (Object.keys(demographicWhere).length) {
-    //   Object.assign(where, demographicWhere)
-    // }
-
-    return where
-  }
-
-  private validateDemographicFilter(filter: DemographicFilter): string[] {
-    // TODO: @Stephen, not sure if you still want to do this with the raw SQL
-    // The client passing too many field might be bad for performance, up to you
-    const fieldNames = Object.keys(filter)
-    // enforce max fields
-    if (fieldNames.length > PeopleService.MAX_FIELDS) {
-      throw new BadRequestException(
-        `Too many fields in filter. Max allowed is ${PeopleService.MAX_FIELDS}`,
-      )
-    }
-
-    // validate field names
-    for (const apiField of fieldNames) {
-      const spec = DEMOGRAPHIC_FILTER_FIELDS[apiField]
-      if (!spec) {
-        throw new BadRequestException(`Unsupported filter field: ${apiField}`)
-      }
-    }
-
-    return fieldNames
-  }
-
-  // TODO: @Stephen delete this when you're done
-  // Leaving this just document the logic you'll need to implement for votingPerformance fields
-  private translateDemographicFilter(
-    filter: DemographicFilter,
-    electionYear: number,
-  ) {
-    const where: Prisma.VoterWhereInput = {}
-    const andClauses: Prisma.VoterWhereInput[] = []
-
-    const fieldNames = this.validateDemographicFilter(filter)
-    if (!fieldNames.length) return where
-
-    for (const apiField of fieldNames) {
-      const spec = DEMOGRAPHIC_FILTER_FIELDS[apiField]
-      const ops = filter[apiField] as FieldFilterOps
-      const { type } = spec
-      let { prismaField } = spec
-
-      // Handle voting performance fields dynamically based on election year
-      if (
-        apiField === 'votingPerformanceEvenYearGeneral' ||
-        apiField === 'votingPerformanceMinorElection'
-      ) {
-        const isEvenYear = electionYear % 2 === 0
-        if (apiField === 'votingPerformanceEvenYearGeneral' && !isEvenYear) {
-          continue // Skip this field for odd years
-        }
-        if (apiField === 'votingPerformanceMinorElection' && isEvenYear) {
-          continue // Skip this field for even years
-        }
-        // Use the appropriate field based on election year
-        prismaField = isEvenYear
-          ? 'VotingPerformanceEvenYearGeneral'
-          : 'VotingPerformanceMinorElection'
-      }
-
-      const clauses: Prisma.VoterWhereInput[] = []
-    }
-  }
-
-  // TODO: Implement this @Stephen
-  private buildVoterFiltersSql(
-    filters: AllowedFilter[],
-    electionYear: number,
-    demographicFilter: DemographicFilter,
-  ): Prisma.Sql | null {
-    const andClauses: Prisma.Sql[] = []
-    if (!andClauses.length) return null
-    return Prisma.sql`${Prisma.join(andClauses, ' AND ')}`
+    return buildVoterSelect(full, electionYear)
   }
 
   private async rawCountForDistrict(args: {
     state: string
-    districtId?: string
-    filters: AllowedFilter[]
-    demographicFilter: DemographicFilter
+    districtId: string
+    filters: FilterData
     electionYear: number
   }): Promise<number> {
-    const { state, districtId, filters, demographicFilter, electionYear } = args
+    const { state, districtId, electionYear: _electionYear } = args
 
-    // TODO: Make sure this works @Stephen
-    const voterFiltersSql = this.buildVoterFiltersSql(
-      filters,
-      electionYear,
-      demographicFilter,
-    )
+    const voterFiltersSql = buildVoterFiltersSql(args.filters)
     if (!voterFiltersSql) {
       if (districtId) {
         const rows = await this.client.$queryRaw<{ voter_count: bigint }[]>(
@@ -797,5 +490,25 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     )
     const count = rows[0]?.voter_count ?? 0n
     return Number(count)
+  }
+
+  private temporaryBuildWhereSql(options: {
+    state: string
+    districtId?: string | undefined
+  }): Prisma.VoterWhereInput {
+    const { state, districtId } = options
+    const where: Prisma.VoterWhereInput = { State: state as USState }
+
+    if (districtId) {
+      const andClauses: Prisma.VoterWhereInput[] = []
+      if (where.AND) {
+        andClauses.push(...(Array.isArray(where.AND) ? where.AND : [where.AND]))
+      }
+      andClauses.push({
+        DistrictLinks: { some: { districtId, state: state as USState } },
+      })
+      where.AND = andClauses
+    }
+    return where
   }
 }
