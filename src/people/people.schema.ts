@@ -80,25 +80,32 @@ export const listPeopleSchema = z.object({
 
 export class ListPeopleDTO extends createZodDto(listPeopleSchema) {}
 
-export const downloadPeopleSchema = z.object({
-  state: stateSchema,
-  // Support both naming conventions; aliases are optional
-  districtType: z.string(),
-  districtName: z.string(),
-  electionLocation: z.string().optional(),
-  electionType: z.string().optional(),
-  electionYear: electionYearSchema,
-  filters: filtersSchema,
-  full: booleanDefault(true),
-})
+export const downloadPeopleSchema = z
+  .object({
+    state: stateSchema,
+    // Support both naming conventions; aliases are optional
+    districtType: z.string().optional(),
+    districtName: z.string().optional(),
+    electionLocation: z.string().optional(),
+    electionType: z.string().optional(),
+    electionYear: electionYearSchema,
+    filters: filtersSchema,
+    full: booleanDefault(true),
+  })
+  .refine(
+    (v) =>
+      (!!v.districtType && !!v.districtName) ||
+      (!v.districtType && !v.districtName),
+    'districtType and districtName are required together unless a valid statewide claim is present',
+  )
 
 export class DownloadPeopleDTO extends createZodDto(downloadPeopleSchema) {}
 
 export const searchPeopleSchema = z
   .object({
     state: stateSchema,
-    districtType: z.string(),
-    districtName: z.string(),
+    districtType: z.string().optional(),
+    districtName: z.string().optional(),
     phone: z.string().optional(),
     name: z.string().optional(),
     firstName: z.string().optional(),
@@ -115,6 +122,12 @@ export const searchPeopleSchema = z
   .refine(
     (v) => !!(v.phone || v.name || v.firstName || v.lastName),
     'Provide phone or name to search',
+  )
+  .refine(
+    (v) =>
+      (!!v.districtType && !!v.districtName) ||
+      (!v.districtType && !v.districtName),
+    'districtType and districtName are required together unless a valid statewide claim is present',
   )
 
 export class SearchPeopleDTO extends createZodDto(searchPeopleSchema) {}
