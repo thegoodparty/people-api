@@ -32,29 +32,18 @@ export class StatsService extends createPrismaBase(MODELS.DistrictStats) {
   }
 
   async getTotalCounts(districtId: string) {
-    // TODO: Accept changes on conflict for Swain's code here
-    // const totalCounts = await this.model.findUnique({
-    //   select: {
-    //     totalConstituents: true,
-    //     totalConstituentsWithCellPhone: true
-    //   },
-    //   where: { districtId },
-    // })
-    // if (!totalCounts) {
-    //   throw new NotFoundException(
-    //     `District stats not found for districtId=${districtId}`,
-    //   )
-    // }
-    // return totalCounts
-    // TODO: Revert the mocking when stats are loaded
-    // return {
-    //   totalConstituents: 597_696,
-    //   totalConstituentsWithCellPhone: 358_617
-    // }
-    // TODO: Dummy counts until we merge with Swain's PR
-    return {
-      totalConstituents: 14_957_341,
-      totalConstituentsWithCellPhone: 7_478_670,
+    const totalCounts = await this.model.findUnique({
+      select: {
+        totalConstituents: true,
+        totalConstituentsWithCellPhone: true,
+      },
+      where: { districtId },
+    })
+    if (!totalCounts) {
+      throw new NotFoundException(
+        `District stats not found for districtId=${districtId}`,
+      )
     }
+    return totalCounts
   }
 }
