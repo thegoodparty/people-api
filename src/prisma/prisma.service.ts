@@ -46,9 +46,7 @@ export class PrismaService
       })),
       errorFormat: 'pretty',
       datasources: {
-        db: {
-          url: url.toString(),
-        },
+        db: { url: url.toString() },
       },
     })
   }
