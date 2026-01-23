@@ -2,49 +2,6 @@ import { createZodDto } from 'nestjs-zod'
 import { USState } from '@prisma/client'
 import { z } from 'zod'
 
-const allowedFilters = [
-  'audienceSuperVoters',
-  'audienceLikelyVoters',
-  // TODO: remove this once gp-api change is deployed.
-  'audienceUnreliableVoters',
-  'audienceUnlikelyVoters',
-  'audienceFirstTimeVoters',
-  'audienceUnknown',
-  'partyIndependent',
-  'partyDemocrat',
-  'partyRepublican',
-  'partyUnknown',
-  'age18_25',
-  'age25_35',
-  'age35_50',
-  'age50Plus',
-  'ageUnknown',
-  'genderMale',
-  'genderFemale',
-  'genderUnknown',
-  'incomeUnknown',
-  'audienceRequest',
-  'cellPhoneFormatted',
-  'landlineFormatted',
-] as const
-
-// Accepts: array values, single value, or a JSON-like array string
-// Example supported strings: "[\"a\",\"b\"]" or "['a','b']"
-const coerceArray = (v: unknown): unknown[] => {
-  if (Array.isArray(v)) return v
-  if (typeof v === 'string') {
-    const s = v.trim()
-    if (s.startsWith('[') && s.endsWith(']')) {
-      try {
-        const normalized = s.replace(/'/g, '"')
-        const parsed = JSON.parse(normalized)
-        if (Array.isArray(parsed)) return parsed
-      } catch {}
-    }
-    return s ? [s] : []
-  }
-  return v != null ? [v] : []
-}
 import { filtersSchema } from './schemas/filters.schema'
 
 // ---- Shared atoms to keep schemas DRY ----
@@ -159,6 +116,21 @@ export const samplePeopleSchema = z
   )
 
 export class SamplePeopleDTO extends createZodDto(samplePeopleSchema) {}
+
+const getPersonParamsSchema = z.object({
+  id: z.preprocess(
+    (v) => (typeof v === 'string' ? v.trim() : v),
+    z.string().uuid(),
+  ),
+})
+
+export class GetPersonParamsDTO extends createZodDto(getPersonParamsSchema) {}
+
+export class GetPersonQueryDTO extends createZodDto(
+  z.object({
+    state: stateSchema,
+  }),
+) {}
 
 export type ListPeopleSchema = z.infer<typeof listPeopleSchema>
 export type DownloadPeopleSchema = z.infer<typeof downloadPeopleSchema>
