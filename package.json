@@ -1,5 +1,5 @@
 {
-  "name": "election-api",
+  "name": "people-api",
   "version": "0.0.1",
   "description": "",
   "author": "GoodParty.org Team",
@@ -13,7 +13,7 @@
     "start:perf-local": "ENV_PATH=.env.perf-local NODE_ENV=perf-local nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
+    "start:prod": "node dist/src/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "lint-format": "npm run lint && npm run format",
     "migrate:dev": "node ./scripts/disallow-perf-local.js && npx prisma migrate dev",
@@ -39,16 +39,18 @@
     "@nestjs/platform-fastify": "^11.0.11",
     "@nestjs/swagger": "^11.0.6",
     "@prisma/client": "^6.5.0",
-    "newrelic": "^11.20.0",
     "deepmerge-ts": "^7.1.5",
     "dotenv": "^16.4.7",
     "jsonwebtoken": "^9.0.2",
     "lodash": "^4.17.21",
     "module-alias": "^2.2.3",
+    "murmurhash": "^2.0.1",
     "nestjs-pino": "^4.4.1",
     "nestjs-zod": "^4.3.1",
+    "newrelic": "^11.20.0",
     "pino-http": "^10.5.0",
     "prisma": "^6.4.1",
+    "prisma-json-types-generator": "^3.6.2",
     "qs": "^6.13.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
@@ -76,8 +78,8 @@
     "prisma": "^6.5.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.6",
-    "typescript": "^5.8.2",
-    "typescript-eslint": "^8.27.0"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.53.0"
   },
   "rootDir": "src"
 }

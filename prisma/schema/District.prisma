@@ -50,6 +50,65 @@ enum USState {
     WV
     WI
     WY
+
+    @@schema("public")
+}
+
+enum DistrictUSState {
+    AL
+    AK
+    AZ
+    AR
+    CA
+    CO
+    CT
+    DC
+    DE
+    FL
+    GA
+    HI
+    ID
+    IL
+    IN
+    IA
+    KS
+    KY
+    LA
+    ME
+    MD
+    MA
+    MI
+    MN
+    MS
+    MO
+    MT
+    NE
+    NV
+    NH
+    NJ
+    NM
+    NY
+    NC
+    ND
+    OH
+    OK
+    OR
+    PA
+    RI
+    SC
+    SD
+    TN
+    TX
+    UT
+    VT
+    VA
+    WA
+    WV
+    WI
+    WY
+
+    @@map("USState")
+    @@schema("green")
 }
 
 model District {
@@ -58,7 +117,10 @@ model District {
     updatedAt  DateTime        @updatedAt @map("updated_at")
     type       String
     name       String
-    state      USState
+    state      DistrictUSState
     VoterLinks DistrictVoter[]
+
+    @@unique([type, name, state])
     // TODO: Add composite unique: [ type, name, state ]
+    @@schema("green")
 }

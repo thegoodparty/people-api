@@ -1,7 +1,6 @@
 import { createZodDto } from 'nestjs-zod'
-import { STATE_CODES } from 'src/shared/constants/states'
+import { USState } from '@prisma/client'
 import { z } from 'zod'
-import { DEMOGRAPHIC_FILTER_FIELDS } from './people.filters'
 
 const allowedFilters = [
   'audienceSuperVoters',
@@ -46,12 +45,13 @@ const coerceArray = (v: unknown): unknown[] => {
   }
   return v != null ? [v] : []
 }
+import { filtersSchema } from './schemas/filters.schema'
 
 // ---- Shared atoms to keep schemas DRY ----
-const stateSchema = z
-  .string()
-  .transform((v) => v.toUpperCase())
-  .refine((v) => STATE_CODES.includes(v), 'Invalid state code')
+const stateSchema = z.preprocess(
+  (v) => (typeof v === 'string' ? v.toUpperCase() : v),
+  z.nativeEnum(USState),
+)
 
 const electionYearSchema = z
   .preprocess(
@@ -67,98 +67,43 @@ const booleanDefault = (def: boolean) =>
     .optional()
     .default(def)
 
-const legacyToCamel: Record<string, (typeof allowedFilters)[number]> = {
-  audience_superVoters: 'audienceSuperVoters',
-  audience_likelyVoters: 'audienceLikelyVoters',
-  audience_unreliableVoters: 'audienceUnreliableVoters',
-  audience_unlikelyVoters: 'audienceUnlikelyVoters',
-  audience_firstTimeVoters: 'audienceFirstTimeVoters',
-  audience_unknown: 'audienceUnknown',
-  party_independent: 'partyIndependent',
-  party_democrat: 'partyDemocrat',
-  party_republican: 'partyRepublican',
-  party_unknown: 'partyUnknown',
-  age_18_25: 'age18_25',
-  age_25_35: 'age25_35',
-  age_35_50: 'age35_50',
-  age_50_plus: 'age50Plus',
-  age_unknown: 'ageUnknown',
-  gender_male: 'genderMale',
-  gender_female: 'genderFemale',
-  gender_unknown: 'genderUnknown',
-  income_unknown: 'incomeUnknown',
-  audience_request: 'audienceRequest',
-  voterTelephones_CellPhoneFormatted: 'cellPhoneFormatted',
-  voterTelephones_LandlineFormatted: 'landlineFormatted',
-}
-
-const preprocessFilters = (v: unknown) => {
-  const values = coerceArray(v)
-  return values.map((raw) => {
-    const s = String(raw)
-    return (
-      (legacyToCamel[s] as (typeof allowedFilters)[number]) ?? (s as unknown)
-    )
-  })
-}
-
-const filtersSchema = z
-  .preprocess(preprocessFilters, z.array(z.enum(allowedFilters)))
-  .optional()
-  .default([])
-
-const fieldOpsSchema = z.object({
-  eq: z.union([z.string(), z.boolean()]).optional(),
-  in: z
-    .preprocess(
-      (v) => coerceArray(v),
-      z.array(z.union([z.string(), z.boolean()])),
-    )
-    .optional(),
-  is: z.enum(['null', 'not_null']).optional(),
-})
-
-const demographicFilterSchema = z.record(fieldOpsSchema)
-
-export const listPeopleSchema = z
-  .object({
-    state: stateSchema,
-    districtType: z.string().optional(),
-    districtName: z.string().optional(),
-    electionYear: electionYearSchema,
-    filters: filtersSchema,
-    full: booleanDefault(true),
-    resultsPerPage: z.coerce.number().optional().default(50),
-    page: z.coerce.number().optional().default(1),
-    filter: demographicFilterSchema.optional().default({}),
-  })
-  .refine(
-    (v) =>
-      (v.districtType && v.districtName) ||
-      (!v.districtType && !v.districtName),
-    'districtType and districtName must be provided together',
-  )
-
-export class ListPeopleDTO extends createZodDto(listPeopleSchema) {}
-
-export const downloadPeopleSchema = z.object({
+export const listPeopleSchema = z.object({
   state: stateSchema,
-  // Support both naming conventions; aliases are optional
   districtType: z.string().optional(),
   districtName: z.string().optional(),
-  electionLocation: z.string().optional(),
-  electionType: z.string().optional(),
   electionYear: electionYearSchema,
   filters: filtersSchema,
   full: booleanDefault(true),
-  filter: demographicFilterSchema.optional().default({}),
+  resultsPerPage: z.coerce.number().optional().default(50),
+  page: z.coerce.number().optional().default(1),
 })
+
+export class ListPeopleDTO extends createZodDto(listPeopleSchema) {}
+
+export const downloadPeopleSchema = z
+  .object({
+    state: stateSchema,
+    // Support both naming conventions; aliases are optional
+    districtType: z.string().optional(),
+    districtName: z.string().optional(),
+    electionLocation: z.string().optional(),
+    electionType: z.string().optional(),
+    electionYear: electionYearSchema,
+    filters: filtersSchema,
+    full: booleanDefault(true),
+  })
+  .refine(
+    (v) =>
+      (!!v.districtType && !!v.districtName) ||
+      (!v.districtType && !v.districtName),
+    'districtType and districtName are required together unless a valid statewide claim is present',
+  )
 
 export class DownloadPeopleDTO extends createZodDto(downloadPeopleSchema) {}
 
 export const searchPeopleSchema = z
   .object({
-    state: stateSchema.optional(),
+    state: stateSchema,
     districtType: z.string().optional(),
     districtName: z.string().optional(),
     phone: z.string().optional(),
@@ -180,79 +125,40 @@ export const searchPeopleSchema = z
   )
   .refine(
     (v) =>
-      (v.districtType && v.districtName) ||
+      (!!v.districtType && !!v.districtName) ||
       (!v.districtType && !v.districtName),
-    'districtType and districtName must be provided together',
+    'districtType and districtName are required together unless a valid statewide claim is present',
   )
 
 export class SearchPeopleDTO extends createZodDto(searchPeopleSchema) {}
 
-// ---- Stats DTO ----
-const allowedCategoryDefaults = [
-  'age',
-  'homeowner',
-  'income',
-  'education',
-  'familyChildren',
-  'familyMarital',
-] as const
+export class StatsDTO extends createZodDto(
+  z.object({
+    state: stateSchema,
+    districtType: z.string(),
+    districtName: z.string(),
+  }),
+) {}
 
-// Defaults: include all built-in categories plus all demographic filter fields
-const allowedCategoryAllDefault: string[] = [
-  ...allowedCategoryDefaults,
-  ...Object.keys(DEMOGRAPHIC_FILTER_FIELDS).filter(
-    (k) =>
-      ![
-        'voterTelephonesCellPhoneFormatted',
-        'voterTelephonesLandlineFormatted',
-        'votingPerformanceEvenYearGeneral',
-        'votingPerformanceMinorElection',
-      ].includes(k),
-  ),
-]
-
-// Permit any DEMOGRAPHIC_FILTER_FIELDS key name too (validated at runtime in service)
-export const statsSchema = z.object({
-  state: stateSchema,
-  // Keep flexible like download endpoint
-  districtType: z.string().optional(),
-  districtName: z.string().optional(),
-  electionYear: electionYearSchema,
-  filters: filtersSchema,
-  filter: demographicFilterSchema.optional().default({}),
-  // categories can include defaults and/or any DEMOGRAPHIC_FILTER_FIELDS key; runtime validation in service
-  categories: z
-    .preprocess((v) => coerceArray(v), z.array(z.string()))
-    .optional()
-    .default(allowedCategoryAllDefault),
-  // Numeric bucket definitions: map of fieldName -> array of [min,max] inclusive ranges
-  // Example: { ageInt: [[18,25],[26,35],[36,50],[51,200]] }
-  numericBuckets: z
-    .record(
-      z
-        .array(
-          z
-            .tuple([z.coerce.number(), z.coerce.number()])
-            .refine((t) => t[0] <= t[1], 'Bucket min must be <= max'),
-        )
-        .refine((arr) => arr.length > 0, 'At least one bucket required'),
-    )
-    .optional()
-    .default({}),
-  topN: z.coerce.number().int().min(1).max(50).optional().default(10),
-})
-
-export class StatsDTO extends createZodDto(statsSchema) {}
-
-export const samplePeopleSchema = z.object({
-  state: stateSchema,
-  districtType: z.string().optional(),
-  districtName: z.string().optional(),
-  electionYear: electionYearSchema,
-  size: z.coerce.number().int().min(1).max(10000).optional().default(500),
-  full: booleanDefault(true),
-  hasCellPhone: z.coerce.boolean().optional(),
-  excludeIds: z.array(z.string()).optional(),
-})
+export const samplePeopleSchema = z
+  .object({
+    state: stateSchema,
+    districtType: z.string().optional(),
+    districtName: z.string().optional(),
+    electionYear: electionYearSchema,
+    size: z.coerce.number().int().min(1).max(10000).optional().default(500),
+    full: booleanDefault(true),
+    hasCellPhone: z.coerce.boolean().optional(),
+    excludeIds: z.array(z.string()).optional(),
+  })
+  .refine(
+    (v) =>
+      (!!v.districtType && !!v.districtName) ||
+      (!v.districtType && !v.districtName),
+    'districtType and districtName are required together unless a valid statewide claim is present',
+  )
 
 export class SamplePeopleDTO extends createZodDto(samplePeopleSchema) {}
+
+export type ListPeopleSchema = z.infer<typeof listPeopleSchema>
+export type DownloadPeopleSchema = z.infer<typeof downloadPeopleSchema>

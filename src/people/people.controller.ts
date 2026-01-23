@@ -39,15 +39,15 @@ export class PeopleController {
     private readonly statsService: StatsService,
   ) {}
 
-  @Get()
-  listPeople(@Query() filterDto: ListPeopleDTO, @Req() req: S2SRequest) {
+  @Post()
+  listPeople(@Body() filterDto: ListPeopleDTO, @Req() req: S2SRequest) {
     this.enforceDistrictOrClaim(filterDto, req)
     return this.peopleService.findPeople(filterDto)
   }
 
-  @Get('download')
+  @Post('download')
   async downloadPeople(
-    @Query() dto: DownloadPeopleDTO,
+    @Body() dto: DownloadPeopleDTO,
     @Req() req: S2SRequest,
     @Res() res: FastifyReply,
   ) {
@@ -71,7 +71,8 @@ export class PeopleController {
 
   // Post to allow large arrays of excludeIds in the body
   @Post('sample')
-  samplePeoplePost(@Body() dto: SamplePeopleDTO) {
+  async samplePeoplePost(@Body() dto: SamplePeopleDTO, @Req() req: S2SRequest) {
+    this.enforceDistrictOrClaim(dto, req)
     return this.peopleService.samplePeople(dto)
   }
 
@@ -92,7 +93,7 @@ export class PeopleController {
       throw new NotFoundException(`Person with ID ${id} not found`)
     }
 
-    return person
+    return this.peopleService.transformToPersonOutput(person)
   }
 
   private enforceDistrictOrClaim(
