@@ -7,6 +7,7 @@ export type FilterFieldMetadata = {
   type: FilterFieldType
 }
 
+// TODO: Delete all of this and update our SELECT logic
 // Whitelist of filterable demographic fields (camelCase API → Prisma field)
 export const DEMOGRAPHIC_FILTER_FIELDS: Record<string, FilterFieldMetadata> = {
   businessOwner: { prismaField: 'Business_Owner', type: 'string' },
