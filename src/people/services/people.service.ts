@@ -355,7 +355,9 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
   }
 
   async samplePeople(dto: SamplePeopleDTO) {
-    return this.sampleService.samplePeople(dto)
+    return this.sampleService
+      .samplePeople(dto)
+      .then(transformToPersonOutputArray)
   }
   private rawBuildWhere(args: {
     state: string
