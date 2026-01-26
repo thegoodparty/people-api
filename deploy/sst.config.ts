@@ -269,6 +269,13 @@ export default $config({
             interval: 30,
           }
         },
+        service: (serviceArgs) => {
+          // @ts-expect-error serviceArgs.networkConfiguration is not typed
+          serviceArgs.networkConfiguration = {
+            ...serviceArgs.networkConfiguration,
+            assignPublicIp: true,
+          }
+        },
       },
     })
 
