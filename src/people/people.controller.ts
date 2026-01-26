@@ -12,6 +12,8 @@ import {
 } from '@nestjs/common'
 import {
   DownloadPeopleDTO,
+  GetPersonParamsDTO,
+  GetPersonQueryDTO,
   ListPeopleDTO,
   SamplePeopleDTO,
   SearchPeopleDTO,
@@ -83,12 +85,15 @@ export class PeopleController {
   }
 
   @Get(':id')
-  async getPerson(@Param('id') id: string) {
-    if (!id || id.trim() === '') {
-      throw new BadRequestException('ID parameter is required')
-    }
-
-    const person = await this.peopleService.findUnique({ where: { id } })
+  async getPerson(
+    @Param() params: GetPersonParamsDTO,
+    @Query() query: GetPersonQueryDTO,
+  ) {
+    const { id } = params
+    const { state } = query
+    const person = await this.peopleService.findFirst({
+      where: { id, State: state },
+    })
     if (!person) {
       throw new NotFoundException(`Person with ID ${id} not found`)
     }
