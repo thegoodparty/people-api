@@ -106,7 +106,7 @@ export const samplePeopleSchema = z
     size: z.coerce.number().int().min(1).max(10000).optional().default(500),
     full: booleanDefault(true),
     hasCellPhone: z.coerce.boolean().optional(),
-    excludeIds: z.array(z.string()).optional(),
+    excludeIds: z.array(z.string().uuid()).optional(),
   })
   .refine(
     (v) =>

@@ -111,14 +111,17 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     const voterSelect = buildVoterSelectSql(full, electionYear, 'v')
     // TODO: implement once the filters are done
 
-    const antiJoin = this.buildAntiJoin(excludeIds)
+    const { excludeCte, excludeJoin, excludeWhere } =
+      this.buildAntiJoin(excludeIds)
     const result = await this.runSampleQuery({
       districtId,
       seed,
       hashDivisor,
       innerWhereClause,
       outerWhereClause,
-      antiJoin,
+      excludeCte,
+      excludeJoin,
+      excludeWhere,
       prelimit,
       voterSelect,
       size,
@@ -132,7 +135,9 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
         hashDivisor,
         innerWhereClause,
         outerWhereClause,
-        antiJoin,
+        excludeCte,
+        excludeJoin,
+        excludeWhere,
         prelimit,
         voterSelect,
         size,
@@ -148,7 +153,9 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     hashDivisor: number
     innerWhereClause: Prisma.Sql
     outerWhereClause: Prisma.Sql
-    antiJoin: Prisma.Sql
+    excludeCte: Prisma.Sql
+    excludeJoin: Prisma.Sql
+    excludeWhere: Prisma.Sql
     prelimit: number
     voterSelect: Prisma.Sql
     size: number
@@ -159,7 +166,9 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       hashDivisor,
       innerWhereClause,
       outerWhereClause,
-      antiJoin,
+      excludeCte,
+      excludeJoin,
+      excludeWhere,
       prelimit,
       voterSelect,
       size,
@@ -178,9 +187,10 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
         SET LOCAL plan_cache_mode = force_custom_plan;
       `)
         return tx.$queryRaw`
-      WITH candidate_ids AS (
+      WITH ${excludeCte} candidate_ids AS (
         SELECT dv.voter_id AS id
         FROM green."DistrictVoter" dv
+          ${excludeJoin}
           ${innerWhereClause}
       
           -- PRE CUT - Divides all of the voterIds into buckets
@@ -192,7 +202,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
           ) = ANY(${hashBuckets}::int[])
       
           -- cheap hash anti-join (exclude ids)
-          ${antiJoin}
+          ${excludeWhere}
       
         LIMIT ${prelimit}
       )
@@ -228,15 +238,26 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     return buckets
   }
 
-  private buildAntiJoin(excludeIds: string[]): Prisma.Sql {
-    if (excludeIds.length == 0) return Prisma.sql``
+  private buildAntiJoin(excludeIds: string[]): {
+    excludeCte: Prisma.Sql
+    excludeJoin: Prisma.Sql
+    excludeWhere: Prisma.Sql
+  } {
+    if (excludeIds.length == 0) {
+      return {
+        excludeCte: Prisma.empty,
+        excludeJoin: Prisma.empty,
+        excludeWhere: Prisma.empty,
+      }
+    }
 
-    return Prisma.sql`
-    LEFT JOIN (
-      SELECT unnest($excludeIds::uuid[]) AS id
-    ) e ON e.id = dv.voter_id
-    WHERE e.id IS NULL
-    `
+    const excludeArray = Prisma.sql`ARRAY[${Prisma.join(excludeIds)}]::uuid[]`
+
+    return {
+      excludeCte: Prisma.sql`exclude AS (SELECT unnest(${excludeArray}) AS id),`,
+      excludeJoin: Prisma.sql`LEFT JOIN exclude e ON e.id = dv.voter_id`,
+      excludeWhere: Prisma.sql`AND e.id IS NULL`,
+    }
   }
 
   private buildOuterWhereSql(
