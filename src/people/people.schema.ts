@@ -118,10 +118,7 @@ export const samplePeopleSchema = z
 export class SamplePeopleDTO extends createZodDto(samplePeopleSchema) {}
 
 const getPersonParamsSchema = z.object({
-  id: z.preprocess(
-    (v) => (typeof v === 'string' ? v.trim() : v),
-    z.string().uuid(),
-  ),
+  id: z.string().uuid(),
 })
 
 export class GetPersonParamsDTO extends createZodDto(getPersonParamsSchema) {}
