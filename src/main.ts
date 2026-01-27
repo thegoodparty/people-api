@@ -65,8 +65,11 @@ const bootstrap = async () => {
     .setVersion('1.0')
     .build()
 
-  const document = SwaggerModule.createDocument(app, swaggerConfig)
-  SwaggerModule.setup('api', app, document)
+  SwaggerModule.setup(
+    'api',
+    app,
+    SwaggerModule.createDocument(app, swaggerConfig),
+  )
 
   await app.register(helmet)
 

@@ -34,7 +34,6 @@ export default $config({
     const aws = await import('@pulumi/aws')
     const codebuild: any = await import('@pulumi/aws/codebuild/index.js')
     const pulumi = await import('@pulumi/pulumi')
-    const vpc = sst.aws.Vpc.get('api', 'vpc-0763fa52c32ebcf6a')
 
     if ($app.stage !== 'master' && $app.stage !== 'develop') {
       throw new Error('Invalid stage. Only master, and develop are supported.')
@@ -61,8 +60,19 @@ export default $config({
     }
 
     // Each stage will get its own Cluster.
+    const publicSubnets = [
+      'subnet-07984b965dabfdedc',
+      'subnet-01c540e6428cdd8db',
+    ]
     const cluster = new sst.aws.Cluster('fargate', {
-      vpc,
+      vpc: {
+        id: 'vpc-0763fa52c32ebcf6a',
+        cloudmapNamespaceId: 'ns-bpckkkhib6wqx4pr',
+        cloudmapNamespaceName: 'sst',
+        containerSubnets: publicSubnets,
+        securityGroups: ['sg-01de8d67b0f0ec787'],
+        loadBalancerSubnets: publicSubnets,
+      },
       transform: {
         cluster: (clusterArgs, _opts, _name) => {
           clusterArgs.name = `people-api-${$app.stage}-fargateCluster`
@@ -257,6 +267,13 @@ export default $config({
             ...targetArgs.healthCheck,
             path: '/v1/health',
             interval: 30,
+          }
+        },
+        service: (serviceArgs) => {
+          // @ts-expect-error serviceArgs.networkConfiguration is not typed
+          serviceArgs.networkConfiguration = {
+            ...serviceArgs.networkConfiguration,
+            assignPublicIp: true,
           }
         },
       },

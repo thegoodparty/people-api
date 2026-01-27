@@ -12,6 +12,8 @@ import {
 } from '@nestjs/common'
 import {
   DownloadPeopleDTO,
+  GetPersonParamsDTO,
+  GetPersonQueryDTO,
   ListPeopleDTO,
   SamplePeopleDTO,
   SearchPeopleDTO,
@@ -39,15 +41,15 @@ export class PeopleController {
     private readonly statsService: StatsService,
   ) {}
 
-  @Get()
-  listPeople(@Query() filterDto: ListPeopleDTO, @Req() req: S2SRequest) {
+  @Post()
+  listPeople(@Body() filterDto: ListPeopleDTO, @Req() req: S2SRequest) {
     this.enforceDistrictOrClaim(filterDto, req)
     return this.peopleService.findPeople(filterDto)
   }
 
-  @Get('download')
+  @Post('download')
   async downloadPeople(
-    @Query() dto: DownloadPeopleDTO,
+    @Body() dto: DownloadPeopleDTO,
     @Req() req: S2SRequest,
     @Res() res: FastifyReply,
   ) {
@@ -71,7 +73,8 @@ export class PeopleController {
 
   // Post to allow large arrays of excludeIds in the body
   @Post('sample')
-  samplePeoplePost(@Body() dto: SamplePeopleDTO) {
+  async samplePeoplePost(@Body() dto: SamplePeopleDTO, @Req() req: S2SRequest) {
+    this.enforceDistrictOrClaim(dto, req)
     return this.peopleService.samplePeople(dto)
   }
 
@@ -82,17 +85,20 @@ export class PeopleController {
   }
 
   @Get(':id')
-  async getPerson(@Param('id') id: string) {
-    if (!id || id.trim() === '') {
-      throw new BadRequestException('ID parameter is required')
-    }
-
-    const person = await this.peopleService.findUnique({ where: { id } })
+  async getPerson(
+    @Param() params: GetPersonParamsDTO,
+    @Query() query: GetPersonQueryDTO,
+  ) {
+    const { id } = params
+    const { state } = query
+    const person = await this.peopleService.findFirst({
+      where: { id, State: state },
+    })
     if (!person) {
       throw new NotFoundException(`Person with ID ${id} not found`)
     }
 
-    return person
+    return this.peopleService.transformToPersonOutput(person)
   }
 
   private enforceDistrictOrClaim(
