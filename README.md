@@ -75,7 +75,7 @@ npx prisma generate
 
 For local development and testing, you can seed the database with fake voter data:
 
-```
+```bash
 npm run seed
 ```
 
