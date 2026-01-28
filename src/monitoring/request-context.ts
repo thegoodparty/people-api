@@ -206,8 +206,9 @@ export function buildGpRequestContext(input: {
     ...(districtType ? { [GP_ATTR_DISTRICT_TYPE]: districtType } : {}),
   }
 
-  const excludeIdsCount = Array.isArray(getObjectKey(body, REQ_KEY_EXCLUDE_IDS))
-    ? (getObjectKey(body, REQ_KEY_EXCLUDE_IDS) as JsonValue[]).length
+  const excludeIds = getObjectKey(body, REQ_KEY_EXCLUDE_IDS)
+  const excludeIdsCount = Array.isArray(excludeIds)
+    ? excludeIds.length
     : undefined
 
   const filtersFromBody = getObjectKey(body, REQ_KEY_FILTERS)
