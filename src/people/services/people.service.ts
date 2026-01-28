@@ -20,6 +20,7 @@ import {
 } from '../utils/transformToPersonOutput.utils'
 import { FilterData } from '../schemas/filters.schema'
 import { DefaultArgs } from '@prisma/client/runtime/library'
+import { StatsService } from './stats.service'
 
 export const DATABASE_SCHEMA = 'green'
 const VOTER_TABLENAME = 'Voter'
@@ -48,6 +49,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
   constructor(
     private readonly sampleService: SampleService,
     private readonly districtService: DistrictService,
+    private readonly statsService: StatsService,
   ) {
     super()
   }
@@ -81,18 +83,16 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       resolvedDistrictId = resolvedDistrict.id
     }
 
-    const totalResultsPromise = this.rawCountForDistrict({
-      state,
-      districtId: resolvedDistrictId,
-      filters,
-      electionYear,
-      search,
-    })
-
     const select = buildVoterSelect(full, electionYear)
 
     const [totalResults, people] = await Promise.all([
-      totalResultsPromise,
+      this.rawCountForDistrict({
+        state,
+        districtId: resolvedDistrictId,
+        filters,
+        electionYear,
+        search,
+      }),
       this.client.$queryRaw<
         Array<{
           [K in keyof typeof select]: string | number | boolean | null
@@ -104,7 +104,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
           whereClause: this.rawBuildWhere({
             state,
             districtId: resolvedDistrictId,
-            voterFiltersSql: buildVoterFiltersSql(filters),
+            filters,
             search,
           }),
           take: resultsPerPage,
@@ -158,7 +158,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     const whereClause = this.rawBuildWhere({
       districtId: resolvedDistrictId,
       state,
-      voterFiltersSql: buildVoterFiltersSql(filters),
+      filters,
     })
 
     const select = buildVoterSelect(full, electionYear)
@@ -238,10 +238,11 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
   private rawBuildWhere(args: {
     state: string
     districtId?: string | null
+    filters: FilterData
     search?: string
-    voterFiltersSql?: Prisma.Sql | null
   }): Prisma.Sql {
-    const { state, districtId, voterFiltersSql } = args
+    const { state, districtId } = args
+
     const parts: Prisma.Sql[] = []
     parts.push(
       Prisma.sql`v."State" = CAST(${state}::text AS "public"."USState")`,
@@ -273,6 +274,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
         }
       }
     }
+    const voterFiltersSql = buildVoterFiltersSql(args.filters)
     if (voterFiltersSql) {
       parts.push(voterFiltersSql)
     }
@@ -290,12 +292,17 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
   }): Promise<number> {
     const { state, districtId, search } = args
 
-    const voterFiltersSql = buildVoterFiltersSql(args.filters)
+    if (districtId && !args.search && Object.keys(args.filters).length === 0) {
+      const { totalConstituents } =
+        await this.statsService.getTotalCounts(districtId)
+      return totalConstituents
+    }
+
     const whereClause = this.rawBuildWhere({
       state,
       districtId,
       search,
-      voterFiltersSql,
+      filters: args.filters,
     })
 
     if (districtId) {
