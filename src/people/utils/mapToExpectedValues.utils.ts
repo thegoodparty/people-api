@@ -105,9 +105,7 @@ export const mapBusinessOwner = (
   value: string | null | undefined,
 ): BusinessOwnerExpected => {
   if (!value) return 'Unknown'
-  const v = value.toLowerCase()
-  if (v.includes('owner')) return 'Yes'
-  return 'Unknown'
+  return 'Yes'
 }
 
 export const mapVeteranStatus = (
