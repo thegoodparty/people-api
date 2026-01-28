@@ -42,7 +42,6 @@ export class PeopleController {
 
   @Post()
   listPeople(@Body() filterDto: ListPeopleDTO, @Req() req: S2SRequest) {
-    console.log(JSON.stringify({ filterDto }))
     this.enforceDistrictOrClaim(filterDto, req)
     return this.peopleService.findPeople(filterDto)
   }
