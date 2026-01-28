@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
 import { samplePeopleSchema } from '../people.schema'
-import { buildVoterSelect, buildVoterSelectSql } from '../people.select'
+import { buildVoterSelectSql } from '../people.select'
 import { DistrictService } from 'src/district/services/district.service'
 import { z } from 'zod'
 import { StatsService } from './stats.service'
@@ -81,9 +81,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       state,
       districtType = '',
       districtName = '',
-      electionYear,
       size = 500,
-      full = true,
       hasCellPhone = true,
       excludeIds = [],
     } = dto
@@ -108,8 +106,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       hasCellPhone,
     )
 
-    const voterSelect = buildVoterSelectSql(full, electionYear, 'v')
-    // TODO: implement once the filters are done
+    const { sql: voterSelect } = buildVoterSelectSql()
 
     const { excludeCte, excludeJoin, excludeWhere } =
       this.buildAntiJoin(excludeIds)
@@ -295,12 +292,5 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     return whereParts.length > 0
       ? Prisma.sql`WHERE ${Prisma.join(whereParts, ' AND ')}`
       : Prisma.sql`WHERE TRUE`
-  }
-
-  private buildVoterSelect(
-    full: boolean,
-    electionYear: number,
-  ): Prisma.VoterSelect {
-    return buildVoterSelect(full, electionYear)
   }
 }
