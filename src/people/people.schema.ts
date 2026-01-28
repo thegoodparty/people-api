@@ -10,28 +10,12 @@ const stateSchema = z.preprocess(
   z.nativeEnum(USState),
 )
 
-const electionYearSchema = z
-  .preprocess(
-    (v) => (v === undefined ? new Date().getFullYear() : v),
-    z.coerce.number().int(),
-  )
-  .optional()
-  .default(new Date().getFullYear())
-
-const booleanDefault = (def: boolean) =>
-  z
-    .preprocess((v) => (v === undefined ? def : v), z.coerce.boolean())
-    .optional()
-    .default(def)
-
 export const listPeopleSchema = z.object({
   state: stateSchema,
   districtType: z.string().optional(),
   districtName: z.string().optional(),
-  electionYear: electionYearSchema,
   filters: filtersSchema,
   search: z.string().optional(),
-  full: booleanDefault(true),
   resultsPerPage: z.coerce.number().optional().default(50),
   page: z.coerce.number().optional().default(1),
 })
@@ -46,9 +30,7 @@ export const downloadPeopleSchema = z
     districtName: z.string().optional(),
     electionLocation: z.string().optional(),
     electionType: z.string().optional(),
-    electionYear: electionYearSchema,
     filters: filtersSchema,
-    full: booleanDefault(true),
   })
   .refine(
     (v) =>
@@ -72,9 +54,7 @@ export const samplePeopleSchema = z
     state: stateSchema,
     districtType: z.string().optional(),
     districtName: z.string().optional(),
-    electionYear: electionYearSchema,
     size: z.coerce.number().int().min(1).max(10000).optional().default(500),
-    full: booleanDefault(true),
     hasCellPhone: z.coerce.boolean().optional(),
     excludeIds: z.array(z.string().uuid()).optional(),
   })
