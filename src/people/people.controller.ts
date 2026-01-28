@@ -16,7 +16,6 @@ import {
   GetPersonQueryDTO,
   ListPeopleDTO,
   SamplePeopleDTO,
-  SearchPeopleDTO,
   StatsDTO,
 } from './people.schema'
 import { PeopleService } from './services/people.service'
@@ -76,12 +75,6 @@ export class PeopleController {
   async samplePeoplePost(@Body() dto: SamplePeopleDTO, @Req() req: S2SRequest) {
     this.enforceDistrictOrClaim(dto, req)
     return this.peopleService.samplePeople(dto)
-  }
-
-  @Get('search')
-  search(@Query() dto: SearchPeopleDTO, @Req() req: S2SRequest) {
-    this.enforceDistrictOrClaim(dto, req)
-    return this.peopleService.searchVoters(dto)
   }
 
   @Get(':id')
