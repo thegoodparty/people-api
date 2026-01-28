@@ -262,13 +262,14 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
         )
       } else {
         const tokens = search.split(/\s+/).filter(Boolean)
-        const first = tokens.at(0)
-        if (first) {
-          parts.push(Prisma.sql`v."FirstName" = ${first}`)
-        }
-        const last = tokens.at(1)
-        if (last) {
-          parts.push(Prisma.sql`v."LastName" = ${last}`)
+        if (tokens.length === 1) {
+          parts.push(
+            Prisma.sql`(v."FirstName" = ${tokens[0]} OR v."LastName" = ${tokens[0]})`,
+          )
+        } else if (tokens.length >= 2) {
+          parts.push(
+            Prisma.sql`(v."FirstName" = ${tokens[0]} AND v."LastName" = ${tokens[1]})`,
+          )
         }
       }
     }
