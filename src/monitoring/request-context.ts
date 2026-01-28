@@ -25,6 +25,42 @@ export type S2SPayload = {
   state?: string
 }
 
+const GP_ATTR_STATE = 'gp.state' as const
+const GP_ATTR_DISTRICT_TYPE = 'gp.districtType' as const
+const GP_ATTR_ENDPOINT_GROUP = 'gp.endpointGroup' as const
+const GP_ATTR_OPERATION = 'gp.operation' as const
+
+const REQ_KEY_STATE = 'state' as const
+const REQ_KEY_DISTRICT_TYPE = 'districtType' as const
+const REQ_KEY_DISTRICT_NAME = 'districtName' as const
+const REQ_KEY_EXCLUDE_IDS = 'excludeIds' as const
+const REQ_KEY_FILTERS = 'filters' as const
+const REQ_KEY_PAGE = 'page' as const
+const REQ_KEY_RESULTS_PER_PAGE = 'resultsPerPage' as const
+const REQ_KEY_ELECTION_YEAR = 'electionYear' as const
+
+const FILTER_OP_IN = 'in' as const
+const FILTER_OP_EQ = 'eq' as const
+const FILTER_OP_GTE = 'gte' as const
+const FILTER_OP_LTE = 'lte' as const
+const FILTER_OP_IS = 'is' as const
+
+const FILTER_SUMMARY_BOOLEAN = 'boolean' as const
+const FILTER_SUMMARY_INVALID = 'invalid' as const
+const FILTER_SUMMARY_OBJECT = 'object' as const
+const FILTER_SUMMARY_SEPARATOR = '|' as const
+
+const CONTROLLER_SUFFIX = 'Controller' as const
+const PEOPLE_CONTROLLER_BASE = 'People' as const
+const HANDLER_SAMPLE_POST = 'samplePeoplePost' as const
+const HANDLER_SAMPLE_GET = 'samplePeople' as const
+const OP_SAMPLE = 'sample' as const
+
+const HANDLER_LIST = 'listPeople' as const
+const HANDLER_STATS = 'getStats' as const
+const OP_LIST = 'list' as const
+const OP_STATS = 'stats' as const
+
 const MAX_FILTER_KEYS = 50
 const MAX_FILTER_OPERATORS = 25
 const MAX_FILTER_SUMMARY_LENGTH = 500
@@ -60,12 +96,12 @@ function extractFiltersSummary(
   for (const key of keys) {
     const value = getObjectKey(filters, key)
     if (typeof value === 'boolean') {
-      parts.push(`${key}:boolean`)
+      parts.push(`${key}:${FILTER_SUMMARY_BOOLEAN}`)
       continue
     }
 
     if (!isJsonObject(value)) {
-      parts.push(`${key}:invalid`)
+      parts.push(`${key}:${FILTER_SUMMARY_INVALID}`)
       continue
     }
 
@@ -74,31 +110,37 @@ function extractFiltersSummary(
       operatorSet.size < MAX_FILTER_OPERATORS ? operatorSet.add(op) : undefined
     }
 
-    const inVal = getObjectKey(value, 'in')
+    const inVal = getObjectKey(value, FILTER_OP_IN)
     const inCount = Array.isArray(inVal) ? inVal.length : undefined
-    const eqVal = getObjectKey(value, 'eq')
+    const eqVal = getObjectKey(value, FILTER_OP_EQ)
     const hasEq = eqVal !== undefined
-    const gteVal = getObjectKey(value, 'gte')
+    const gteVal = getObjectKey(value, FILTER_OP_GTE)
     const hasGte = gteVal !== undefined
-    const lteVal = getObjectKey(value, 'lte')
+    const lteVal = getObjectKey(value, FILTER_OP_LTE)
     const hasLte = lteVal !== undefined
-    const isVal = getObjectKey(value, 'is')
+    const isVal = getObjectKey(value, FILTER_OP_IS)
     const hasIs = typeof isVal === 'string'
 
     const fragment = [
-      'in' in value && inCount !== undefined ? `in(${inCount})` : undefined,
-      hasEq ? 'eq' : undefined,
-      hasGte ? 'gte' : undefined,
-      hasLte ? 'lte' : undefined,
-      hasIs ? 'is' : undefined,
+      FILTER_OP_IN in value && inCount !== undefined
+        ? `in(${inCount})`
+        : undefined,
+      hasEq ? FILTER_OP_EQ : undefined,
+      hasGte ? FILTER_OP_GTE : undefined,
+      hasLte ? FILTER_OP_LTE : undefined,
+      hasIs ? FILTER_OP_IS : undefined,
     ]
       .filter((v): v is string => v !== undefined)
       .join(',')
 
-    parts.push(fragment ? `${key}:${fragment}` : `${key}:object`)
+    parts.push(
+      fragment ? `${key}:${fragment}` : `${key}:${FILTER_SUMMARY_OBJECT}`,
+    )
   }
 
-  const filtersSummary = parts.join('|').slice(0, MAX_FILTER_SUMMARY_LENGTH)
+  const filtersSummary = parts
+    .join(FILTER_SUMMARY_SEPARATOR)
+    .slice(0, MAX_FILTER_SUMMARY_LENGTH)
   const filtersOperators = Array.from(operatorSet)
 
   return { filtersKeys: keys, filtersOperators, filtersSummary }
@@ -108,15 +150,20 @@ function normalizeOperationName(
   controllerName: string,
   handlerName: string,
 ): { endpointGroup: string; operation: string } {
-  const endpointGroup = controllerName.endsWith('Controller')
-    ? controllerName.slice(0, -'Controller'.length)
+  const endpointGroup = controllerName.endsWith(CONTROLLER_SUFFIX)
+    ? controllerName.slice(0, -CONTROLLER_SUFFIX.length)
     : controllerName
 
   const operation =
-    endpointGroup === 'People' &&
-    (handlerName === 'samplePeoplePost' || handlerName === 'samplePeople')
-      ? 'sample'
-      : handlerName
+    endpointGroup === PEOPLE_CONTROLLER_BASE &&
+    (handlerName === HANDLER_SAMPLE_POST || handlerName === HANDLER_SAMPLE_GET)
+      ? OP_SAMPLE
+      : endpointGroup === PEOPLE_CONTROLLER_BASE && handlerName === HANDLER_LIST
+        ? OP_LIST
+        : endpointGroup === PEOPLE_CONTROLLER_BASE &&
+            handlerName === HANDLER_STATS
+          ? OP_STATS
+          : handlerName
 
   return { endpointGroup: endpointGroup.toLowerCase(), operation }
 }
@@ -129,9 +176,10 @@ export function buildGpRequestContext(input: {
   params?: JsonObject
   s2s?: S2SPayload
 }): { apmAttributes: GpApmAttributes; logContext: GpLogContext } {
+  const { controllerName, handlerName } = input
   const { endpointGroup, operation } = normalizeOperationName(
-    input.controllerName,
-    input.handlerName,
+    controllerName,
+    handlerName,
   )
 
   const body = input.body ?? {}
@@ -139,31 +187,31 @@ export function buildGpRequestContext(input: {
   const params = input.params ?? {}
 
   const state =
-    asString(getObjectKey(body, 'state')) ??
-    asString(getObjectKey(query, 'state')) ??
-    asString(getObjectKey(params, 'state'))
+    asString(getObjectKey(body, REQ_KEY_STATE)) ??
+    asString(getObjectKey(query, REQ_KEY_STATE)) ??
+    asString(getObjectKey(params, REQ_KEY_STATE))
 
   const districtType =
-    asString(getObjectKey(body, 'districtType')) ??
-    asString(getObjectKey(query, 'districtType'))
+    asString(getObjectKey(body, REQ_KEY_DISTRICT_TYPE)) ??
+    asString(getObjectKey(query, REQ_KEY_DISTRICT_TYPE))
 
   const districtName =
-    asString(getObjectKey(body, 'districtName')) ??
-    asString(getObjectKey(query, 'districtName'))
+    asString(getObjectKey(body, REQ_KEY_DISTRICT_NAME)) ??
+    asString(getObjectKey(query, REQ_KEY_DISTRICT_NAME))
 
   const apmAttributes: GpApmAttributes = {
-    'gp.endpointGroup': endpointGroup,
-    'gp.operation': operation,
-    ...(state ? { 'gp.state': state } : {}),
-    ...(districtType ? { 'gp.districtType': districtType } : {}),
+    [GP_ATTR_ENDPOINT_GROUP]: endpointGroup,
+    [GP_ATTR_OPERATION]: operation,
+    ...(state ? { [GP_ATTR_STATE]: state } : {}),
+    ...(districtType ? { [GP_ATTR_DISTRICT_TYPE]: districtType } : {}),
   }
 
-  const excludeIdsCount = Array.isArray(getObjectKey(body, 'excludeIds'))
-    ? (getObjectKey(body, 'excludeIds') as JsonValue[]).length
+  const excludeIdsCount = Array.isArray(getObjectKey(body, REQ_KEY_EXCLUDE_IDS))
+    ? (getObjectKey(body, REQ_KEY_EXCLUDE_IDS) as JsonValue[]).length
     : undefined
 
-  const filtersFromBody = getObjectKey(body, 'filters')
-  const filtersFromQuery = getObjectKey(query, 'filters')
+  const filtersFromBody = getObjectKey(body, REQ_KEY_FILTERS)
+  const filtersFromQuery = getObjectKey(query, REQ_KEY_FILTERS)
   const { filtersKeys, filtersOperators, filtersSummary } =
     extractFiltersSummary(filtersFromBody ?? filtersFromQuery)
 
@@ -173,18 +221,22 @@ export function buildGpRequestContext(input: {
     ...(filtersOperators ? { filtersOperators } : {}),
     ...(filtersSummary ? { filtersSummary } : {}),
     ...(excludeIdsCount !== undefined ? { excludeIdsCount } : {}),
-    ...(asNumber(getObjectKey(query, 'page')) !== undefined
-      ? { page: asNumber(getObjectKey(query, 'page')) as number }
+    ...(asNumber(getObjectKey(query, REQ_KEY_PAGE)) !== undefined
+      ? { page: asNumber(getObjectKey(query, REQ_KEY_PAGE)) as number }
       : {}),
-    ...(asNumber(getObjectKey(query, 'resultsPerPage')) !== undefined
+    ...(asNumber(getObjectKey(query, REQ_KEY_RESULTS_PER_PAGE)) !== undefined
       ? {
           resultsPerPage: asNumber(
-            getObjectKey(query, 'resultsPerPage'),
+            getObjectKey(query, REQ_KEY_RESULTS_PER_PAGE),
           ) as number,
         }
       : {}),
-    ...(asNumber(getObjectKey(body, 'electionYear')) !== undefined
-      ? { electionYear: asNumber(getObjectKey(body, 'electionYear')) as number }
+    ...(asNumber(getObjectKey(body, REQ_KEY_ELECTION_YEAR)) !== undefined
+      ? {
+          electionYear: asNumber(
+            getObjectKey(body, REQ_KEY_ELECTION_YEAR),
+          ) as number,
+        }
       : {}),
   }
 
