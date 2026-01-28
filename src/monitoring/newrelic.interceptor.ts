@@ -86,7 +86,6 @@ export class NewRelicInterceptor implements NestInterceptor {
           statusCode:
             typeof res?.statusCode === 'number' ? res.statusCode : undefined,
         })
-        console.log('New Relic Custom Event Fired')
       }),
     )
   }
