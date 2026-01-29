@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common'
+import { Injectable } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
 import { samplePeopleSchema } from '../people.schema'
@@ -42,12 +42,6 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     const remainingConstituentCount = hasCellPhone
       ? totalConstituentsWithCellPhone - effectiveExcludeCount
       : totalConstituents - effectiveExcludeCount
-
-    if (remainingConstituentCount < targetSampleSize) {
-      throw new BadRequestException(
-        `Not enough non-excluded constituents ${remainingConstituentCount} to satisfy target: ${targetSampleSize}`,
-      )
-    }
 
     const desiredRows = targetSampleSize * SampleService.OVERSAMPLE_FACTOR
     const dontBucketCutoff =
