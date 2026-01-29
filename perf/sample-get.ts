@@ -15,9 +15,9 @@ const baseScenarios = {
 
 export const options =
   (__ENV && __ENV.ONLY) === 'small'
-    ? { scenarios: { small: baseScenarios.small } }
+    ? { scenarios: { small: { ...baseScenarios.small, startTime: '0s' } } }
     : (__ENV && __ENV.ONLY) === 'large'
-      ? { scenarios: { large: baseScenarios.large } }
+      ? { scenarios: { large: { ...baseScenarios.large, startTime: '0s' } } }
       : { scenarios: baseScenarios }
 
 export function small() {
