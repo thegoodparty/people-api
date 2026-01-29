@@ -8,8 +8,10 @@ import newrelic from 'newrelic'
 import { Observable } from 'rxjs'
 import { finalize } from 'rxjs/operators'
 import {
-  buildGpRequestContext,
+  buildGpApmAttributes,
+  buildGpLogContext,
   type GpLogContext,
+  type JsonValue,
   type JsonObject,
   type S2SPayload,
 } from './request-context'
@@ -30,6 +32,7 @@ const THRESHOLD_MS_LIST_NO_FILTERS = 2000 as const
 const THRESHOLD_MS_LIST_WITH_FILTERS = 5000 as const
 const THRESHOLD_MS_SAMPLE = 30000 as const
 const THRESHOLD_MS_STATS = 400 as const
+const REQ_KEY_FILTERS = 'filters' as const
 
 @Injectable()
 export class NewRelicInterceptor implements NestInterceptor {
@@ -48,7 +51,7 @@ export class NewRelicInterceptor implements NestInterceptor {
     const controllerName = context.getClass().name
     const handlerName = context.getHandler().name
 
-    const { apmAttributes, logContext } = buildGpRequestContext({
+    const apmAttributes = buildGpApmAttributes({
       controllerName,
       handlerName,
       body: req.body,
@@ -57,17 +60,20 @@ export class NewRelicInterceptor implements NestInterceptor {
       s2s: req.s2s,
     })
 
-    req.gpLogContext = logContext
-
     newrelic.addCustomAttributes(apmAttributes)
     newrelic.setTransactionName(
       `${controllerName}${TRANSACTION_NAME_SEPARATOR}${handlerName}`,
     )
 
+    const filtersValue: JsonValue | undefined =
+      (req.body ? req.body[REQ_KEY_FILTERS] : undefined) ??
+      (req.query ? req.query[REQ_KEY_FILTERS] : undefined)
+    const hasFilters = hasAnyFilters(filtersValue)
+
     const slowThresholdMs = getSlowThresholdMs({
       endpointGroup: apmAttributes[GP_ATTR_ENDPOINT_GROUP],
       operation: apmAttributes[GP_ATTR_OPERATION],
-      filtersKeys: logContext.filtersKeys,
+      hasFilters,
     })
     return next.handle().pipe(
       finalize(() => {
@@ -79,8 +85,15 @@ export class NewRelicInterceptor implements NestInterceptor {
           return
         }
 
+        const logContext = buildGpLogContext({
+          body: req.body,
+          query: req.query,
+        })
+        req.gpLogContext = logContext
+
         newrelic.recordCustomEvent(SLOW_REQUEST_EVENT_NAME, {
           ...apmAttributes,
+          ...logContext,
           durationMs,
           thresholdMs: slowThresholdMs,
           statusCode:
@@ -94,14 +107,14 @@ export class NewRelicInterceptor implements NestInterceptor {
 function getSlowThresholdMs(input: {
   endpointGroup: string | undefined
   operation: string | undefined
-  filtersKeys: string[] | undefined
+  hasFilters: boolean
 }): number | undefined {
   if (input.endpointGroup !== ENDPOINT_GROUP_PEOPLE || !input.operation) {
     return undefined
   }
 
   if (input.operation === OP_LIST) {
-    return input.filtersKeys && input.filtersKeys.length > 0
+    return input.hasFilters
       ? THRESHOLD_MS_LIST_WITH_FILTERS
       : THRESHOLD_MS_LIST_NO_FILTERS
   }
@@ -111,6 +124,24 @@ function getSlowThresholdMs(input: {
   }
 
   return input.operation === OP_STATS ? THRESHOLD_MS_STATS : undefined
+}
+
+function isJsonObject(value: JsonValue | undefined): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function hasAnyFilters(filters: JsonValue | undefined): boolean {
+  if (!isJsonObject(filters)) {
+    return false
+  }
+
+  for (const key in filters) {
+    if (Object.prototype.hasOwnProperty.call(filters, key)) {
+      return true
+    }
+  }
+
+  return false
 }
 
 type RequestWithGpContext = {

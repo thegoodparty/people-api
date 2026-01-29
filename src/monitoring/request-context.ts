@@ -39,17 +39,6 @@ const REQ_KEY_PAGE = 'page' as const
 const REQ_KEY_RESULTS_PER_PAGE = 'resultsPerPage' as const
 const REQ_KEY_ELECTION_YEAR = 'electionYear' as const
 
-const FILTER_OP_IN = 'in' as const
-const FILTER_OP_EQ = 'eq' as const
-const FILTER_OP_GTE = 'gte' as const
-const FILTER_OP_LTE = 'lte' as const
-const FILTER_OP_IS = 'is' as const
-
-const FILTER_SUMMARY_BOOLEAN = 'boolean' as const
-const FILTER_SUMMARY_INVALID = 'invalid' as const
-const FILTER_SUMMARY_OBJECT = 'object' as const
-const FILTER_SUMMARY_SEPARATOR = '|' as const
-
 const CONTROLLER_SUFFIX = 'Controller' as const
 const PEOPLE_CONTROLLER_BASE = 'People' as const
 const HANDLER_SAMPLE_POST = 'samplePeoplePost' as const
@@ -61,12 +50,21 @@ const HANDLER_STATS = 'getStats' as const
 const OP_LIST = 'list' as const
 const OP_STATS = 'stats' as const
 
-const MAX_FILTER_KEYS = 50
-const MAX_FILTER_OPERATORS = 25
 const MAX_FILTER_SUMMARY_LENGTH = 500
+const TRUNCATION_SENTINEL = '…' as const
 
-function isJsonObject(value: JsonValue): value is JsonObject {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+function safeStringify(value: JsonValue): string {
+  try {
+    return JSON.stringify(value) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function truncateString(value: string, maxLength: number): string {
+  return value.length > maxLength
+    ? `${value.slice(0, Math.max(0, maxLength - TRUNCATION_SENTINEL.length))}${TRUNCATION_SENTINEL}`
+    : value
 }
 
 function asString(value: JsonValue): string | undefined {
@@ -85,65 +83,15 @@ function getObjectKey(obj: JsonObject, key: string): JsonValue | undefined {
 function extractFiltersSummary(
   filters: JsonValue,
 ): Pick<GpLogContext, 'filtersKeys' | 'filtersOperators' | 'filtersSummary'> {
-  if (!isJsonObject(filters)) {
+  if (filters === undefined) {
     return {}
   }
 
-  const keys = Object.keys(filters).slice(0, MAX_FILTER_KEYS)
-  const operatorSet = new Set<string>()
-  const parts: string[] = []
-
-  for (const key of keys) {
-    const value = getObjectKey(filters, key)
-    if (typeof value === 'boolean') {
-      parts.push(`${key}:${FILTER_SUMMARY_BOOLEAN}`)
-      continue
-    }
-
-    if (!isJsonObject(value)) {
-      parts.push(`${key}:${FILTER_SUMMARY_INVALID}`)
-      continue
-    }
-
-    const ops = Object.keys(value)
-    for (const op of ops) {
-      operatorSet.size < MAX_FILTER_OPERATORS ? operatorSet.add(op) : undefined
-    }
-
-    const inVal = getObjectKey(value, FILTER_OP_IN)
-    const inCount = Array.isArray(inVal) ? inVal.length : undefined
-    const eqVal = getObjectKey(value, FILTER_OP_EQ)
-    const hasEq = eqVal !== undefined
-    const gteVal = getObjectKey(value, FILTER_OP_GTE)
-    const hasGte = gteVal !== undefined
-    const lteVal = getObjectKey(value, FILTER_OP_LTE)
-    const hasLte = lteVal !== undefined
-    const isVal = getObjectKey(value, FILTER_OP_IS)
-    const hasIs = typeof isVal === 'string'
-
-    const fragment = [
-      FILTER_OP_IN in value && inCount !== undefined
-        ? `in(${inCount})`
-        : undefined,
-      hasEq ? FILTER_OP_EQ : undefined,
-      hasGte ? FILTER_OP_GTE : undefined,
-      hasLte ? FILTER_OP_LTE : undefined,
-      hasIs ? FILTER_OP_IS : undefined,
-    ]
-      .filter((v): v is string => v !== undefined)
-      .join(',')
-
-    parts.push(
-      fragment ? `${key}:${fragment}` : `${key}:${FILTER_SUMMARY_OBJECT}`,
-    )
-  }
-
-  const filtersSummary = parts
-    .join(FILTER_SUMMARY_SEPARATOR)
-    .slice(0, MAX_FILTER_SUMMARY_LENGTH)
-  const filtersOperators = Array.from(operatorSet)
-
-  return { filtersKeys: keys, filtersOperators, filtersSummary }
+  const filtersSummary = truncateString(
+    safeStringify(filters),
+    MAX_FILTER_SUMMARY_LENGTH,
+  )
+  return filtersSummary ? { filtersSummary } : {}
 }
 
 function normalizeOperationName(
@@ -168,14 +116,14 @@ function normalizeOperationName(
   return { endpointGroup: endpointGroup.toLowerCase(), operation }
 }
 
-export function buildGpRequestContext(input: {
+export function buildGpApmAttributes(input: {
   controllerName: string
   handlerName: string
   query?: JsonObject
   body?: JsonObject
   params?: JsonObject
   s2s?: S2SPayload
-}): { apmAttributes: GpApmAttributes; logContext: GpLogContext } {
+}): GpApmAttributes {
   const { controllerName, handlerName } = input
   const { endpointGroup, operation } = normalizeOperationName(
     controllerName,
@@ -195,16 +143,24 @@ export function buildGpRequestContext(input: {
     asString(getObjectKey(body, REQ_KEY_DISTRICT_TYPE)) ??
     asString(getObjectKey(query, REQ_KEY_DISTRICT_TYPE))
 
-  const districtName =
-    asString(getObjectKey(body, REQ_KEY_DISTRICT_NAME)) ??
-    asString(getObjectKey(query, REQ_KEY_DISTRICT_NAME))
-
-  const apmAttributes: GpApmAttributes = {
+  return {
     [GP_ATTR_ENDPOINT_GROUP]: endpointGroup,
     [GP_ATTR_OPERATION]: operation,
     ...(state ? { [GP_ATTR_STATE]: state } : {}),
     ...(districtType ? { [GP_ATTR_DISTRICT_TYPE]: districtType } : {}),
   }
+}
+
+export function buildGpLogContext(input: {
+  query?: JsonObject
+  body?: JsonObject
+}): GpLogContext {
+  const body = input.body ?? {}
+  const query = input.query ?? {}
+
+  const districtName =
+    asString(getObjectKey(body, REQ_KEY_DISTRICT_NAME)) ??
+    asString(getObjectKey(query, REQ_KEY_DISTRICT_NAME))
 
   const excludeIds = getObjectKey(body, REQ_KEY_EXCLUDE_IDS)
   const excludeIdsCount = Array.isArray(excludeIds)
@@ -216,7 +172,7 @@ export function buildGpRequestContext(input: {
   const { filtersKeys, filtersOperators, filtersSummary } =
     extractFiltersSummary(filtersFromBody ?? filtersFromQuery)
 
-  const logContext: GpLogContext = {
+  return {
     ...(districtName ? { districtName } : {}),
     ...(filtersKeys ? { filtersKeys } : {}),
     ...(filtersOperators ? { filtersOperators } : {}),
@@ -240,6 +196,4 @@ export function buildGpRequestContext(input: {
         }
       : {}),
   }
-
-  return { apmAttributes, logContext }
 }
