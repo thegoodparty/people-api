@@ -4,10 +4,32 @@ import { scenario } from 'k6/execution'
 export const BASE_URL = (__ENV && __ENV.BASE_URL) || 'http://localhost:3002/v1'
 export const duration_small = new Trend('duration_small', true)
 export const duration_large = new Trend('duration_large', true)
+export const duration_small_full_filters = new Trend(
+  'duration_small_full_filters',
+  true,
+)
+export const duration_large_full_filters = new Trend(
+  'duration_large_full_filters',
+  true,
+)
 export const cold_first_hit_small = new Trend('cold_first_hit_small', true)
 export const cold_first_hit_large = new Trend('cold_first_hit_large', true)
+export const cold_first_hit_small_full_filters = new Trend(
+  'cold_first_hit_small_full_filters',
+  true,
+)
+export const cold_first_hit_large_full_filters = new Trend(
+  'cold_first_hit_large_full_filters',
+  true,
+)
 export const error_rate_small = new Rate('error_rate_small')
 export const error_rate_large = new Rate('error_rate_large')
+export const error_rate_small_full_filters = new Rate(
+  'error_rate_small_full_filters',
+)
+export const error_rate_large_full_filters = new Rate(
+  'error_rate_large_full_filters',
+)
 
 export function buildUrl(path, params = {}) {
   const entries = Object.entries(params)
@@ -43,6 +65,10 @@ export function recordColdFirstHit(res) {
     cold_first_hit_small.add(res.timings.duration)
   } else if (name === 'large') {
     cold_first_hit_large.add(res.timings.duration)
+  } else if (name === 'small_full_filters') {
+    cold_first_hit_small_full_filters.add(res.timings.duration)
+  } else if (name === 'large_full_filters') {
+    cold_first_hit_large_full_filters.add(res.timings.duration)
   }
 }
 
@@ -56,6 +82,12 @@ export function recordMetrics(res) {
   } else if (name === 'large') {
     duration_large.add(res.timings.duration)
     error_rate_large.add(failed ? 1 : 0)
+  } else if (name === 'small_full_filters') {
+    duration_small_full_filters.add(res.timings.duration)
+    error_rate_small_full_filters.add(failed ? 1 : 0)
+  } else if (name === 'large_full_filters') {
+    duration_large_full_filters.add(res.timings.duration)
+    error_rate_large_full_filters.add(failed ? 1 : 0)
   }
 }
 

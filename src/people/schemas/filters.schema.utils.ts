@@ -95,8 +95,7 @@ export const transformFilters = <T extends string>(
       Array.isArray(value.in) &&
       value.in.length > 0
     ) {
-      const includeNull =
-        '_includeNull' in value && value._includeNull === true
+      const includeNull = '_includeNull' in value && value._includeNull === true
       filterList.push(key as T)
       filterValues[key] = value.in.map(String)
       filterOperators[key] = { operator: 'in', values: value.in, includeNull }
@@ -137,8 +136,7 @@ export const transformFilters = <T extends string>(
         'lte' in value && value.lte !== undefined && value.lte !== null
           ? (value.lte as number)
           : undefined
-      const includeNull =
-        '_includeNull' in value && value._includeNull === true
+      const includeNull = '_includeNull' in value && value._includeNull === true
 
       if (gteValue !== undefined && lteValue !== undefined) {
         filterOperators[key] = {

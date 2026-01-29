@@ -6,6 +6,11 @@ declare module 'k6/http' {
       url: string,
       params?: { headers?: Record<string, string> },
     ) => HttpResponse
+    post: (
+      url: string,
+      body: string,
+      params?: { headers?: Record<string, string> },
+    ) => HttpResponse
   }
   export default http
 }
