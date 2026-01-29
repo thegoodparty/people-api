@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
 import { samplePeopleSchema } from '../people.schema'
-import { buildVoterSelectSql } from '../people.select'
+import { BaseDbPerson, buildVoterSelectSql } from '../people.select'
 import { DistrictService } from 'src/district/services/district.service'
 import { z } from 'zod'
 import { StatsService } from './stats.service'
@@ -76,7 +76,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
 
   async samplePeople(
     dto: z.output<typeof samplePeopleSchema>,
-  ): Promise<Prisma.$VoterPayload[]> {
+  ): Promise<BaseDbPerson[]> {
     const {
       state,
       districtType = '',
@@ -156,7 +156,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     prelimit: number
     voterSelect: Prisma.Sql
     size: number
-  }): Promise<Prisma.$VoterPayload[]> {
+  }): Promise<BaseDbPerson[]> {
     const {
       districtId,
       seed,
@@ -214,7 +214,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       {
         timeout: 60_000,
       },
-    )) as Prisma.$VoterPayload[]
+    )) as BaseDbPerson[]
     return rows
   }
 

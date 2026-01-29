@@ -1,92 +1,47 @@
-import {
-  mapGender,
-  mapMaritalStatus,
-  mapPresenceOfChildren,
-  mapHomeowner,
-  mapEducation,
-  mapEthnicity,
-  mapBusinessOwner,
-  mapVeteranStatus,
-  mapPoliticalParty,
-  mapLanguage,
-} from './mapToExpectedValues.utils'
-
-type RawPerson = {
-  id?: string | number | boolean | null | undefined
-  FirstName?: string | number | boolean | null | undefined
-  LastName?: string | number | boolean | null | undefined
-  Gender?: string | number | boolean | null | undefined
-  Age?: string | number | boolean | null | undefined
-  Age_Int?: number | string | boolean | null | undefined
-  Parties_Description?: string | number | boolean | null | undefined
-  Voter_Status?: string | number | boolean | null | undefined
-  Residence_Addresses_AddressLine?: string | number | boolean | null | undefined
-  Residence_Addresses_City?: string | number | boolean | null | undefined
-  Residence_Addresses_State?: string | number | boolean | null | undefined
-  Residence_Addresses_Zip?: string | number | boolean | null | undefined
-  Residence_Addresses_ZipPlus4?: string | number | boolean | null | undefined
-  Residence_Addresses_ExtraAddressLine?:
-    | string
-    | number
-    | boolean
-    | null
-    | undefined
-  VoterTelephones_CellPhoneFormatted?:
-    | string
-    | number
-    | boolean
-    | null
-    | undefined
-  VoterTelephones_LandlineFormatted?:
-    | string
-    | number
-    | boolean
-    | null
-    | undefined
-  Marital_Status?: string | number | boolean | null | undefined
-  Presence_Of_Children?: string | number | boolean | null | undefined
-  Veteran_Status?: string | number | boolean | null | undefined
-  Homeowner_Probability_Model?: string | number | boolean | null | undefined
-  Business_Owner?: string | number | boolean | null | undefined
-  Education_Of_Person?: string | number | boolean | null | undefined
-  EthnicGroups_EthnicGroup1Desc?: string | number | boolean | null | undefined
-  Language_Code?: string | number | boolean | null | undefined
-  Estimated_Income_Amount?: string | number | boolean | null | undefined
-  Residence_Addresses_Latitude?: string | number | boolean | null | undefined
-  Residence_Addresses_Longitude?: string | number | boolean | null | undefined
-  LALVOTERID?: string | number | boolean | null | undefined
-  State?: string | number | boolean | null | undefined
-  MiddleName?: string | number | boolean | null | undefined
-  NameSuffix?: string | number | boolean | null | undefined
-  County?: string | number | boolean | null | undefined
-  City?: string | number | boolean | null | undefined
-  Precinct?: string | number | boolean | null | undefined
-  [key: string]: unknown
-}
+import { BaseDbPerson } from '../people.select'
 
 export type PersonOutputFormat = {
-  id?: string
-  firstName: string
-  lastName: string
-  gender: 'Male' | 'Female' | 'Unknown'
-  age: number | 'Unknown'
-  politicalParty: 'Independent' | 'Democratic' | 'Republican' | 'Unknown'
-  registeredVoter: 'Yes' | 'No' | 'Unknown'
-  activeVoter: 'Unknown'
-  voterStatus: string
-  address: string
-  cellPhone: string
-  landline: string
+  id: string
+  lalVoterId: string
+  firstName: string | null
+  middleName: string | null
+  lastName: string | null
+  nameSuffix: string | null
+  age: number | null
+  state: string
+  address: {
+    line1: string | null
+    line2: string | null
+    city: string | null
+    state: string | null
+    zip: string | null
+    zipPlus4: string | null
+    latitude: string | null
+    longitude: string | null
+  }
+  cellPhone: string | null
+  landline: string | null
+  gender: 'Male' | 'Female' | null
+  politicalParty: 'Independent' | 'Democratic' | 'Republican' | 'Other'
+  registeredVoter: 'Yes' | 'No'
+  estimatedIncomeAmount: number | null
+  voterStatus:
+    | 'Super'
+    | 'Likely'
+    | 'Unreliable'
+    | 'Unlikely'
+    | 'First Time'
+    | null
   maritalStatus:
     | 'Likely Married'
     | 'Likely Single'
     | 'Married'
     | 'Single'
-    | 'Unknown'
-  hasChildrenUnder18: 'Yes' | 'No' | 'Unknown'
-  veteranStatus: 'Yes' | 'Unknown'
-  homeowner: 'Yes' | 'Likely' | 'No' | 'Unknown'
-  businessOwner: 'Yes' | 'Unknown'
+    | null
+  hasChildrenUnder18: 'Yes' | 'No' | null
+  veteranStatus: 'Yes' | null
+  homeowner: 'Yes' | 'Likely' | 'No' | null
+  businessOwner: 'Yes' | null
   levelOfEducation:
     | 'None'
     | 'High School Diploma'
@@ -94,172 +49,180 @@ export type PersonOutputFormat = {
     | 'Some College'
     | 'College Degree'
     | 'Graduate Degree'
-    | 'Unknown'
+    | null
   ethnicityGroup:
     | 'Asian'
     | 'European'
     | 'Hispanic'
     | 'African American'
     | 'Other'
-    | 'Unknown'
+    | null
   language: 'English' | 'Spanish' | 'Other'
-  estimatedIncomeRange: string
-  lat: string | null
-  lng: string | null
-  lalVoterId?: string | null
-  state?: string | null
-  middleName?: string | null
-  nameSuffix?: string | null
-  residenceAddressesExtraAddressLine?: string | null
-  voterTelephonesLandlineFormatted?: string | null
-  county?: string | null
-  city?: string | null
-  precinct?: string | null
+}
+
+const mapAge = (person: BaseDbPerson): PersonOutputFormat['age'] => {
+  if (typeof person.Age_Int === 'number' && Number.isFinite(person.Age_Int))
+    return person.Age_Int
+  if (person.Age && Number.isFinite(parseInt(String(person.Age), 10)))
+    return parseInt(String(person.Age), 10)
+  return null
+}
+
+const mapGender = (
+  value: string | null | undefined,
+): PersonOutputFormat['gender'] => {
+  if (!value) return null
+  if (value === 'M') return 'Male'
+  if (value === 'F') return 'Female'
+  return null
+}
+
+const mapMaritalStatus = (
+  value: string | null | undefined,
+): PersonOutputFormat['maritalStatus'] => {
+  if (!value) return null
+  const v = value.toLowerCase()
+  if (v.includes('inferred married')) return 'Likely Married'
+  if (v.includes('inferred single')) return 'Likely Single'
+  if (v === 'married') return 'Married'
+  if (v === 'single') return 'Single'
+  return null
+}
+
+const mapPresenceOfChildren = (
+  value: string | null | undefined,
+): PersonOutputFormat['hasChildrenUnder18'] => {
+  if (!value) return null
+  const v = value.toLowerCase()
+  if (v === 'y' || v === 'yes') return 'Yes'
+  if (v === 'n' || v === 'no') return 'No'
+  return null
+}
+
+const mapHomeowner = (
+  value: string | null | undefined,
+): PersonOutputFormat['homeowner'] => {
+  if (!value) return null
+  const v = value.toLowerCase()
+  if (v === 'home owner') return 'Yes'
+  if (v === 'probable home owner') return 'Likely'
+  if (v === 'renter') return 'No'
+  return null
+}
+
+const mapEducation = (
+  value: string | null | undefined,
+): PersonOutputFormat['levelOfEducation'] => {
+  if (!value) return null
+  const v = value.toLowerCase()
+  if (v === 'did not complete high school likely') return 'None'
+  if (v === 'completed high school likely') return 'High School Diploma'
+  if (v === 'attended vocational/technical school likely')
+    return 'Technical School'
+  if (v === 'attended but did not complete college likely')
+    return 'Some College'
+  if (v === 'completed college likely') return 'College Degree'
+  if (v === 'completed graduate school likely') return 'Graduate Degree'
+  return null
+}
+
+const mapEthnicity = (
+  value: string | null | undefined,
+): PersonOutputFormat['ethnicityGroup'] => {
+  if (!value) return null
+  const v = value.toLowerCase()
+  if (v === 'east and south asian') return 'Asian'
+  if (v === 'european') return 'European'
+  if (v === 'hispanic and portuguese') return 'Hispanic'
+  if (v === 'likely african-american') return 'African American'
+  if (v === 'other') return 'Other'
+  return null
+}
+
+const mapBusinessOwner = (
+  value: string | null | undefined,
+): PersonOutputFormat['businessOwner'] => {
+  if (!value) return null
+  return 'Yes'
+}
+
+const mapVeteranStatus = (
+  value: string | null | undefined,
+): PersonOutputFormat['veteranStatus'] => {
+  if (!value) return null
+  if (value === 'Yes') return 'Yes'
+  return null
+}
+
+const mapPoliticalParty = (
+  value: string | null | undefined,
+): PersonOutputFormat['politicalParty'] => {
+  if (!value) return 'Other'
+  const v = value.toLowerCase()
+  if (v.includes('democratic') || v.includes('democrat')) return 'Democratic'
+  if (v.includes('republican')) return 'Republican'
+  if (
+    v.includes('independent') ||
+    v.includes('declined to state') ||
+    v.includes('non-partisan')
+  )
+    return 'Independent'
+  return 'Other'
+}
+
+const mapLanguage = (
+  value: string | null | undefined,
+): PersonOutputFormat['language'] => {
+  if (!value) return 'Other'
+  const v = value.toLowerCase()
+  if (v === 'english') return 'English'
+  if (v === 'spanish') return 'Spanish'
+  return 'Other'
+}
+
+const mapVoterStatus = (
+  value: string | null | undefined,
+): PersonOutputFormat['voterStatus'] => {
+  if (value === 'Unknown') return null
+  return value as PersonOutputFormat['voterStatus']
 }
 
 export function transformToPersonOutput(
-  person:
-    | RawPerson
-    | Record<string, string | number | boolean | null | undefined>,
+  person: BaseDbPerson,
 ): PersonOutputFormat {
-  const firstName = String(person.FirstName || '')
-  const lastName = String(person.LastName || '')
-  const gender = mapGender(String(person.Gender || ''))
-  const age =
-    typeof person.Age_Int === 'number' && Number.isFinite(person.Age_Int)
-      ? person.Age_Int
-      : person.Age && Number.isFinite(parseInt(String(person.Age), 10))
-        ? parseInt(String(person.Age), 10)
-        : 'Unknown'
-  const politicalParty = mapPoliticalParty(
-    String(person.Parties_Description || ''),
-  )
-  const registeredVoter = 'Unknown'
-  const activeVoter = 'Unknown'
-  const voterStatus =
-    person.Voter_Status && typeof person.Voter_Status === 'string'
-      ? person.Voter_Status
-      : 'Unknown'
-  const zipPlus4 =
-    person.Residence_Addresses_ZipPlus4 &&
-    typeof person.Residence_Addresses_ZipPlus4 === 'string'
-      ? `-${person.Residence_Addresses_ZipPlus4}`
-      : ''
-  const addressParts = [
-    person.Residence_Addresses_AddressLine &&
-    typeof person.Residence_Addresses_AddressLine === 'string'
-      ? person.Residence_Addresses_AddressLine
-      : null,
-    [
-      person.Residence_Addresses_City &&
-      typeof person.Residence_Addresses_City === 'string'
-        ? person.Residence_Addresses_City
-        : null,
-      person.Residence_Addresses_State &&
-      typeof person.Residence_Addresses_State === 'string'
-        ? person.Residence_Addresses_State
-        : null,
-    ]
-      .filter((v) => Boolean(v))
-      .join(', '),
-    [
-      person.Residence_Addresses_Zip &&
-      typeof person.Residence_Addresses_Zip === 'string'
-        ? person.Residence_Addresses_Zip
-        : null,
-      zipPlus4,
-    ]
-      .filter((v) => Boolean(v))
-      .join(''),
-  ].filter((v) => Boolean(v))
-  const address = addressParts.length ? addressParts.join(', ') : 'Unknown'
-  const cellPhone =
-    person.VoterTelephones_CellPhoneFormatted &&
-    typeof person.VoterTelephones_CellPhoneFormatted === 'string'
-      ? person.VoterTelephones_CellPhoneFormatted
-      : 'Unknown'
-  const landline =
-    person.VoterTelephones_LandlineFormatted &&
-    typeof person.VoterTelephones_LandlineFormatted === 'string'
-      ? person.VoterTelephones_LandlineFormatted
-      : 'Unknown'
-  const maritalStatus = mapMaritalStatus(String(person.Marital_Status || ''))
-  const hasChildrenUnder18 = mapPresenceOfChildren(
-    String(person.Presence_Of_Children || ''),
-  )
-  const veteranStatus = mapVeteranStatus(String(person.Veteran_Status || ''))
-  const homeowner = mapHomeowner(
-    String(person.Homeowner_Probability_Model || ''),
-  )
-  const businessOwner = mapBusinessOwner(String(person.Business_Owner || ''))
-  const levelOfEducation = mapEducation(
-    String(person.Education_Of_Person || ''),
-  )
-  const ethnicityGroup = mapEthnicity(
-    String(person.EthnicGroups_EthnicGroup1Desc || ''),
-  )
-  const language = mapLanguage(String(person.Language_Code || ''))
-  const estimatedIncomeRange =
-    person.Estimated_Income_Amount &&
-    typeof person.Estimated_Income_Amount === 'string'
-      ? person.Estimated_Income_Amount
-      : 'Unknown'
-  const lat =
-    person.Residence_Addresses_Latitude &&
-    typeof person.Residence_Addresses_Latitude === 'string'
-      ? person.Residence_Addresses_Latitude
-      : null
-  const lng =
-    person.Residence_Addresses_Longitude &&
-    typeof person.Residence_Addresses_Longitude === 'string'
-      ? person.Residence_Addresses_Longitude
-      : null
-
   return {
-    id: person.id ? String(person.id) : undefined,
-    firstName,
-    lastName,
-    gender,
-    age,
-    politicalParty,
-    registeredVoter,
-    activeVoter,
-    voterStatus,
-    address,
-    cellPhone,
-    landline,
-    maritalStatus,
-    hasChildrenUnder18,
-    veteranStatus,
-    homeowner,
-    businessOwner,
-    levelOfEducation,
-    ethnicityGroup,
-    language,
-    estimatedIncomeRange,
-    lat,
-    lng,
-    lalVoterId: person.LALVOTERID ? String(person.LALVOTERID) : null,
-    state: person.State ? String(person.State) : null,
-    middleName: person.MiddleName ? String(person.MiddleName) : null,
-    nameSuffix: person.NameSuffix ? String(person.NameSuffix) : null,
-    residenceAddressesExtraAddressLine:
-      person.Residence_Addresses_ExtraAddressLine
-        ? String(person.Residence_Addresses_ExtraAddressLine)
-        : null,
-    voterTelephonesLandlineFormatted: person.VoterTelephones_LandlineFormatted
-      ? String(person.VoterTelephones_LandlineFormatted)
-      : null,
-    county: person.County ? String(person.County) : null,
-    city: person.City ? String(person.City) : null,
-    precinct: person.Precinct ? String(person.Precinct) : null,
+    id: person.id,
+    lalVoterId: person.LALVOTERID,
+    firstName: person.FirstName ?? null,
+    middleName: person.MiddleName ?? null,
+    lastName: person.LastName ?? null,
+    nameSuffix: person.NameSuffix ?? null,
+    gender: mapGender(person.Gender),
+    age: mapAge(person),
+    politicalParty: mapPoliticalParty(person.Parties_Description),
+    voterStatus: mapVoterStatus(person.Voter_Status),
+    registeredVoter: 'Yes',
+    state: person.State,
+    address: {
+      line1: person.Residence_Addresses_AddressLine,
+      line2: person.Residence_Addresses_ExtraAddressLine,
+      city: person.Residence_Addresses_City,
+      state: person.Residence_Addresses_State,
+      zip: person.Residence_Addresses_Zip,
+      zipPlus4: person.Residence_Addresses_ZipPlus4,
+      latitude: person.Residence_Addresses_Latitude,
+      longitude: person.Residence_Addresses_Longitude,
+    },
+    cellPhone: person.VoterTelephones_CellPhoneFormatted ?? null,
+    landline: person.VoterTelephones_LandlineFormatted ?? null,
+    maritalStatus: mapMaritalStatus(person.Marital_Status),
+    hasChildrenUnder18: mapPresenceOfChildren(person.Presence_Of_Children),
+    veteranStatus: mapVeteranStatus(person.Veteran_Status),
+    homeowner: mapHomeowner(person.Homeowner_Probability_Model),
+    businessOwner: mapBusinessOwner(person.Business_Owner),
+    levelOfEducation: mapEducation(person.Education_Of_Person),
+    ethnicityGroup: mapEthnicity(person.EthnicGroups_EthnicGroup1Desc),
+    language: mapLanguage(person.Language_Code),
+    estimatedIncomeAmount: person.Estimated_Income_Amount_Int,
   }
-}
-
-export function transformToPersonOutputArray(
-  people:
-    | RawPerson[]
-    | Array<Record<string, string | number | boolean | null | undefined>>,
-): PersonOutputFormat[] {
-  return people.map(transformToPersonOutput)
 }
