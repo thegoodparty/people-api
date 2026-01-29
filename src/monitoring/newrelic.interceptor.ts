@@ -10,28 +10,27 @@ import { finalize } from 'rxjs/operators'
 import {
   buildGpApmAttributes,
   buildGpLogContext,
+  ENDPOINT_GROUP_PEOPLE,
+  getProp,
+  GP_ATTR_ENDPOINT_GROUP,
+  GP_ATTR_OPERATION,
+  OP_LIST,
+  OP_SAMPLE,
+  OP_STATS,
+  REQ_KEY_FILTERS,
   type GpLogContext,
   type JsonObject,
   type S2SPayload,
 } from './request-context'
 
-const HEALTH_PATH_PREFIX = '/v1/health' as const
-const SLOW_REQUEST_EVENT_NAME = 'PeopleApiSlowRequest' as const
-const TRANSACTION_NAME_SEPARATOR = '/' as const
+const HEALTH_PATH_PREFIX = '/v1/health'
+const SLOW_REQUEST_EVENT_NAME = 'PeopleApiSlowRequest'
+const TRANSACTION_NAME_SEPARATOR = '/'
 
-const GP_ATTR_ENDPOINT_GROUP = 'gp.endpointGroup' as const
-const GP_ATTR_OPERATION = 'gp.operation' as const
-
-const ENDPOINT_GROUP_PEOPLE = 'people' as const
-const OP_LIST = 'list' as const
-const OP_SAMPLE = 'sample' as const
-const OP_STATS = 'stats' as const
-
-const THRESHOLD_MS_LIST_NO_FILTERS = 2000 as const
-const THRESHOLD_MS_LIST_WITH_FILTERS = 5000 as const
-const THRESHOLD_MS_SAMPLE = 30000 as const
-const THRESHOLD_MS_STATS = 400 as const
-const REQ_KEY_FILTERS = 'filters' as const
+const THRESHOLD_MS_LIST_NO_FILTERS = 2000
+const THRESHOLD_MS_LIST_WITH_FILTERS = 5000
+const THRESHOLD_MS_SAMPLE = 30000
+const THRESHOLD_MS_STATS = 400
 
 @Injectable()
 export class NewRelicInterceptor implements NestInterceptor {
@@ -99,50 +98,42 @@ export class NewRelicInterceptor implements NestInterceptor {
   }
 }
 
+function hasFilters(
+  body: JsonObject | undefined,
+  query: JsonObject | undefined,
+): boolean {
+  const filters =
+    getProp(body, REQ_KEY_FILTERS) ?? getProp(query, REQ_KEY_FILTERS)
+  return (
+    typeof filters === 'object' &&
+    filters !== null &&
+    !Array.isArray(filters) &&
+    Object.keys(filters).length > 0
+  )
+}
+
 function getSlowThresholdMs(input: {
   endpointGroup: string | undefined
   operation: string | undefined
   body: JsonObject | undefined
   query: JsonObject | undefined
 }): number | undefined {
-  return input.endpointGroup !== ENDPOINT_GROUP_PEOPLE || !input.operation
-    ? undefined
-    : input.operation === OP_LIST
-      ? (() => {
-          const bodyFilters =
-            input.body &&
-            Object.prototype.hasOwnProperty.call(input.body, REQ_KEY_FILTERS)
-              ? input.body[REQ_KEY_FILTERS]
-              : undefined
-          const queryFilters =
-            input.query &&
-            Object.prototype.hasOwnProperty.call(input.query, REQ_KEY_FILTERS)
-              ? input.query[REQ_KEY_FILTERS]
-              : undefined
-          const filters = bodyFilters ?? queryFilters
+  if (input.endpointGroup !== ENDPOINT_GROUP_PEOPLE || !input.operation) {
+    return undefined
+  }
 
-          const hasFilters =
-            typeof filters === 'object' &&
-            filters !== null &&
-            !Array.isArray(filters) &&
-            (() => {
-              for (const key in filters) {
-                if (Object.prototype.hasOwnProperty.call(filters, key)) {
-                  return true
-                }
-              }
-              return false
-            })()
-
-          return hasFilters
-            ? THRESHOLD_MS_LIST_WITH_FILTERS
-            : THRESHOLD_MS_LIST_NO_FILTERS
-        })()
-      : input.operation === OP_SAMPLE
-        ? THRESHOLD_MS_SAMPLE
-        : input.operation === OP_STATS
-          ? THRESHOLD_MS_STATS
-          : undefined
+  switch (input.operation) {
+    case OP_SAMPLE:
+      return THRESHOLD_MS_SAMPLE
+    case OP_STATS:
+      return THRESHOLD_MS_STATS
+    case OP_LIST:
+      return hasFilters(input.body, input.query)
+        ? THRESHOLD_MS_LIST_WITH_FILTERS
+        : THRESHOLD_MS_LIST_NO_FILTERS
+    default:
+      return undefined
+  }
 }
 
 type RequestWithGpContext = {
