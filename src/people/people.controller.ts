@@ -2,7 +2,6 @@ import {
   Controller,
   Get,
   Post,
-  NotFoundException,
   Param,
   Query,
   Res,
@@ -61,18 +60,9 @@ export class PeopleController {
 
   @Get(':id')
   async getPerson(
-    @Param() params: GetPersonParamsDTO,
-    @Query() query: GetPersonQueryDTO,
+    @Param() { id }: GetPersonParamsDTO,
+    @Query() { state }: GetPersonQueryDTO,
   ) {
-    const { id } = params
-    const { state } = query
-    const person = await this.peopleService.findFirst({
-      where: { id, State: state },
-    })
-    if (!person) {
-      throw new NotFoundException(`Person with ID ${id} not found`)
-    }
-
-    return this.peopleService.transformToPersonOutput(person)
+    return this.peopleService.findPerson(id, state)
   }
 }

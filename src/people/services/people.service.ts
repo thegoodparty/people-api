@@ -13,10 +13,7 @@ import { FastifyReply } from 'fastify'
 import { format } from '@fast-csv/format'
 import type { RowMap } from '@fast-csv/format'
 import { DistrictService } from 'src/district/services/district.service'
-import {
-  transformToPersonOutputArray,
-  transformToPersonOutput,
-} from '../utils/transformToPersonOutput.utils'
+import { transformToPersonOutput } from '../utils/transformToPersonOutput.utils'
 import { FilterData } from '../schemas/filters.schema'
 import { StatsService } from './stats.service'
 import {
@@ -56,6 +53,18 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     private readonly statsService: StatsService,
   ) {
     super()
+  }
+
+  async findPerson(id: string, state: string) {
+    const select = buildVoterSelectSql().sql
+
+    const result = await this.client.$queryRaw<BaseDbPerson[]>(
+      Prisma.sql`${select} FROM "green"."Voter" v WHERE v."id" = ${id}::uuid AND v."State" = CAST(${state}::text AS "public"."USState")`,
+    )
+    if (!result.length) {
+      throw new NotFoundException(`Person with ID ${id} not found`)
+    }
+    return transformToPersonOutput(result[0])
   }
 
   async findPeople({
@@ -117,7 +126,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
         hasNextPage: currentPage < totalPages,
         hasPreviousPage: currentPage > 1,
       },
-      people: transformToPersonOutputArray(people),
+      people: people.map(transformToPersonOutput),
     }
   }
 
@@ -240,7 +249,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
   async samplePeople(dto: SamplePeopleDTO) {
     return this.sampleService
       .samplePeople(dto)
-      .then(transformToPersonOutputArray)
+      .then((people) => people.map(transformToPersonOutput))
   }
 
   private rawBuildWhere(args: {
@@ -331,10 +340,6 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     )
     const count = rows[0]?.voter_count ?? 0n
     return Number(count)
-  }
-
-  transformToPersonOutput(person: Record<string, unknown>) {
-    return transformToPersonOutput(person)
   }
 
   private buildRawPeopleQuery(args: {
