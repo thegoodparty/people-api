@@ -29,7 +29,10 @@ export function small() {
     size: 1000,
   })
   const res = http.post(url, body, {
-    headers: { ...buildHeaders('perf:sample small'), 'Content-Type': 'application/json' },
+    headers: {
+      ...buildHeaders('perf:sample small'),
+      'Content-Type': 'application/json',
+    },
   })
   recordMetrics(res)
 }
@@ -43,7 +46,10 @@ export function large() {
     size: 1000,
   })
   const res = http.post(url, body, {
-    headers: { ...buildHeaders('perf:sample large'), 'Content-Type': 'application/json' },
+    headers: {
+      ...buildHeaders('perf:sample large'),
+      'Content-Type': 'application/json',
+    },
   })
   recordMetrics(res)
 }
