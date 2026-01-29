@@ -67,18 +67,6 @@ function truncateString(value: string, maxLength: number): string {
     : value
 }
 
-function asString(value: JsonValue): string | undefined {
-  return typeof value === 'string' ? value : undefined
-}
-
-function asNumber(value: JsonValue): number | undefined {
-  return typeof value === 'number' ? value : undefined
-}
-
-function getObjectKey(obj: JsonObject, key: string): JsonValue | undefined {
-  return Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : undefined
-}
-
 // Reduces how much we're logging by producing a summary
 function extractFiltersSummary(
   filters: JsonValue,
@@ -134,14 +122,51 @@ export function buildGpApmAttributes(input: {
   const query = input.query ?? {}
   const params = input.params ?? {}
 
+  const stateFromBody = Object.prototype.hasOwnProperty.call(
+    body,
+    REQ_KEY_STATE,
+  )
+    ? body[REQ_KEY_STATE]
+    : undefined
+  const stateFromQuery = Object.prototype.hasOwnProperty.call(
+    query,
+    REQ_KEY_STATE,
+  )
+    ? query[REQ_KEY_STATE]
+    : undefined
+  const stateFromParams = Object.prototype.hasOwnProperty.call(
+    params,
+    REQ_KEY_STATE,
+  )
+    ? params[REQ_KEY_STATE]
+    : undefined
   const state =
-    asString(getObjectKey(body, REQ_KEY_STATE)) ??
-    asString(getObjectKey(query, REQ_KEY_STATE)) ??
-    asString(getObjectKey(params, REQ_KEY_STATE))
+    typeof stateFromBody === 'string'
+      ? stateFromBody
+      : typeof stateFromQuery === 'string'
+        ? stateFromQuery
+        : typeof stateFromParams === 'string'
+          ? stateFromParams
+          : undefined
 
+  const districtTypeFromBody = Object.prototype.hasOwnProperty.call(
+    body,
+    REQ_KEY_DISTRICT_TYPE,
+  )
+    ? body[REQ_KEY_DISTRICT_TYPE]
+    : undefined
+  const districtTypeFromQuery = Object.prototype.hasOwnProperty.call(
+    query,
+    REQ_KEY_DISTRICT_TYPE,
+  )
+    ? query[REQ_KEY_DISTRICT_TYPE]
+    : undefined
   const districtType =
-    asString(getObjectKey(body, REQ_KEY_DISTRICT_TYPE)) ??
-    asString(getObjectKey(query, REQ_KEY_DISTRICT_TYPE))
+    typeof districtTypeFromBody === 'string'
+      ? districtTypeFromBody
+      : typeof districtTypeFromQuery === 'string'
+        ? districtTypeFromQuery
+        : undefined
 
   return {
     [GP_ATTR_ENDPOINT_GROUP]: endpointGroup,
@@ -158,19 +183,65 @@ export function buildGpLogContext(input: {
   const body = input.body ?? {}
   const query = input.query ?? {}
 
+  const districtNameFromBody = Object.prototype.hasOwnProperty.call(
+    body,
+    REQ_KEY_DISTRICT_NAME,
+  )
+    ? body[REQ_KEY_DISTRICT_NAME]
+    : undefined
+  const districtNameFromQuery = Object.prototype.hasOwnProperty.call(
+    query,
+    REQ_KEY_DISTRICT_NAME,
+  )
+    ? query[REQ_KEY_DISTRICT_NAME]
+    : undefined
   const districtName =
-    asString(getObjectKey(body, REQ_KEY_DISTRICT_NAME)) ??
-    asString(getObjectKey(query, REQ_KEY_DISTRICT_NAME))
+    typeof districtNameFromBody === 'string'
+      ? districtNameFromBody
+      : typeof districtNameFromQuery === 'string'
+        ? districtNameFromQuery
+        : undefined
 
-  const excludeIds = getObjectKey(body, REQ_KEY_EXCLUDE_IDS)
+  const excludeIds = Object.prototype.hasOwnProperty.call(
+    body,
+    REQ_KEY_EXCLUDE_IDS,
+  )
+    ? body[REQ_KEY_EXCLUDE_IDS]
+    : undefined
   const excludeIdsCount = Array.isArray(excludeIds)
     ? excludeIds.length
     : undefined
 
-  const filtersFromBody = getObjectKey(body, REQ_KEY_FILTERS)
-  const filtersFromQuery = getObjectKey(query, REQ_KEY_FILTERS)
+  const filtersFromBody = Object.prototype.hasOwnProperty.call(
+    body,
+    REQ_KEY_FILTERS,
+  )
+    ? body[REQ_KEY_FILTERS]
+    : undefined
+  const filtersFromQuery = Object.prototype.hasOwnProperty.call(
+    query,
+    REQ_KEY_FILTERS,
+  )
+    ? query[REQ_KEY_FILTERS]
+    : undefined
   const { filtersKeys, filtersOperators, filtersSummary } =
     extractFiltersSummary(filtersFromBody ?? filtersFromQuery)
+
+  const pageValue = Object.prototype.hasOwnProperty.call(query, REQ_KEY_PAGE)
+    ? query[REQ_KEY_PAGE]
+    : undefined
+  const resultsPerPageValue = Object.prototype.hasOwnProperty.call(
+    query,
+    REQ_KEY_RESULTS_PER_PAGE,
+  )
+    ? query[REQ_KEY_RESULTS_PER_PAGE]
+    : undefined
+  const electionYearValue = Object.prototype.hasOwnProperty.call(
+    body,
+    REQ_KEY_ELECTION_YEAR,
+  )
+    ? body[REQ_KEY_ELECTION_YEAR]
+    : undefined
 
   return {
     ...(districtName ? { districtName } : {}),
@@ -178,22 +249,12 @@ export function buildGpLogContext(input: {
     ...(filtersOperators ? { filtersOperators } : {}),
     ...(filtersSummary ? { filtersSummary } : {}),
     ...(excludeIdsCount !== undefined ? { excludeIdsCount } : {}),
-    ...(asNumber(getObjectKey(query, REQ_KEY_PAGE)) !== undefined
-      ? { page: asNumber(getObjectKey(query, REQ_KEY_PAGE)) as number }
+    ...(typeof pageValue === 'number' ? { page: pageValue } : {}),
+    ...(typeof resultsPerPageValue === 'number'
+      ? { resultsPerPage: resultsPerPageValue }
       : {}),
-    ...(asNumber(getObjectKey(query, REQ_KEY_RESULTS_PER_PAGE)) !== undefined
-      ? {
-          resultsPerPage: asNumber(
-            getObjectKey(query, REQ_KEY_RESULTS_PER_PAGE),
-          ) as number,
-        }
-      : {}),
-    ...(asNumber(getObjectKey(body, REQ_KEY_ELECTION_YEAR)) !== undefined
-      ? {
-          electionYear: asNumber(
-            getObjectKey(body, REQ_KEY_ELECTION_YEAR),
-          ) as number,
-        }
+    ...(typeof electionYearValue === 'number'
+      ? { electionYear: electionYearValue }
       : {}),
   }
 }

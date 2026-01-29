@@ -11,7 +11,6 @@ import {
   buildGpApmAttributes,
   buildGpLogContext,
   type GpLogContext,
-  type JsonValue,
   type JsonObject,
   type S2SPayload,
 } from './request-context'
@@ -39,7 +38,6 @@ export class NewRelicInterceptor implements NestInterceptor {
   intercept<T>(context: ExecutionContext, next: CallHandler<T>): Observable<T> {
     const httpCtx = context.switchToHttp()
     const req = httpCtx.getRequest<RequestWithGpContext>()
-    const res = httpCtx.getResponse<{ statusCode?: number }>()
 
     const start = Date.now()
 
@@ -65,15 +63,11 @@ export class NewRelicInterceptor implements NestInterceptor {
       `${controllerName}${TRANSACTION_NAME_SEPARATOR}${handlerName}`,
     )
 
-    const filtersValue: JsonValue | undefined =
-      (req.body ? req.body[REQ_KEY_FILTERS] : undefined) ??
-      (req.query ? req.query[REQ_KEY_FILTERS] : undefined)
-    const hasFilters = hasAnyFilters(filtersValue)
-
     const slowThresholdMs = getSlowThresholdMs({
       endpointGroup: apmAttributes[GP_ATTR_ENDPOINT_GROUP],
       operation: apmAttributes[GP_ATTR_OPERATION],
-      hasFilters,
+      body: req.body,
+      query: req.query,
     })
     return next.handle().pipe(
       finalize(() => {
@@ -91,6 +85,7 @@ export class NewRelicInterceptor implements NestInterceptor {
         })
         req.gpLogContext = logContext
 
+        const res = httpCtx.getResponse<{ statusCode?: number }>()
         newrelic.recordCustomEvent(SLOW_REQUEST_EVENT_NAME, {
           ...apmAttributes,
           ...logContext,
@@ -107,41 +102,47 @@ export class NewRelicInterceptor implements NestInterceptor {
 function getSlowThresholdMs(input: {
   endpointGroup: string | undefined
   operation: string | undefined
-  hasFilters: boolean
+  body: JsonObject | undefined
+  query: JsonObject | undefined
 }): number | undefined {
-  if (input.endpointGroup !== ENDPOINT_GROUP_PEOPLE || !input.operation) {
-    return undefined
-  }
+  return input.endpointGroup !== ENDPOINT_GROUP_PEOPLE || !input.operation
+    ? undefined
+    : input.operation === OP_LIST
+      ? (() => {
+          const bodyFilters =
+            input.body &&
+            Object.prototype.hasOwnProperty.call(input.body, REQ_KEY_FILTERS)
+              ? input.body[REQ_KEY_FILTERS]
+              : undefined
+          const queryFilters =
+            input.query &&
+            Object.prototype.hasOwnProperty.call(input.query, REQ_KEY_FILTERS)
+              ? input.query[REQ_KEY_FILTERS]
+              : undefined
+          const filters = bodyFilters ?? queryFilters
 
-  if (input.operation === OP_LIST) {
-    return input.hasFilters
-      ? THRESHOLD_MS_LIST_WITH_FILTERS
-      : THRESHOLD_MS_LIST_NO_FILTERS
-  }
+          const hasFilters =
+            typeof filters === 'object' &&
+            filters !== null &&
+            !Array.isArray(filters) &&
+            (() => {
+              for (const key in filters) {
+                if (Object.prototype.hasOwnProperty.call(filters, key)) {
+                  return true
+                }
+              }
+              return false
+            })()
 
-  if (input.operation === OP_SAMPLE) {
-    return THRESHOLD_MS_SAMPLE
-  }
-
-  return input.operation === OP_STATS ? THRESHOLD_MS_STATS : undefined
-}
-
-function isJsonObject(value: JsonValue | undefined): value is JsonObject {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function hasAnyFilters(filters: JsonValue | undefined): boolean {
-  if (!isJsonObject(filters)) {
-    return false
-  }
-
-  for (const key in filters) {
-    if (Object.prototype.hasOwnProperty.call(filters, key)) {
-      return true
-    }
-  }
-
-  return false
+          return hasFilters
+            ? THRESHOLD_MS_LIST_WITH_FILTERS
+            : THRESHOLD_MS_LIST_NO_FILTERS
+        })()
+      : input.operation === OP_SAMPLE
+        ? THRESHOLD_MS_SAMPLE
+        : input.operation === OP_STATS
+          ? THRESHOLD_MS_STATS
+          : undefined
 }
 
 type RequestWithGpContext = {
