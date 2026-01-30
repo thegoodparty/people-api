@@ -1,12 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Param,
-  Query,
-  Res,
-  Body,
-} from '@nestjs/common'
+import { Controller, Get, Post, Param, Query, Res, Body } from '@nestjs/common'
 import {
   DownloadPeopleDTO,
   GetPersonParamsDTO,
@@ -61,8 +53,8 @@ export class PeopleController {
   @Get(':id')
   async getPerson(
     @Param() { id }: GetPersonParamsDTO,
-    @Query() { state }: GetPersonQueryDTO,
+    @Query() query: GetPersonQueryDTO,
   ) {
-    return this.peopleService.findPerson(id, state)
+    return this.peopleService.findPerson(id, query)
   }
 }
