@@ -225,9 +225,9 @@ const buildBusinessOwnerFilter = (
   if (!op) return null
 
   if (op.operator === 'eq' && op.value === 'Yes') {
-    return Prisma.sql`v."Business_Owner" = 'Owner'`
+    return Prisma.sql`v."Business_Owner" IS NOT NULL`
   } else if (op.operator === 'eq' && op.value === 'Unknown') {
-    return Prisma.sql`v."Business_Owner" != 'Owner'`
+    return Prisma.sql`v."Business_Owner" IS NULL`
   } else if (op.operator === 'in' && op.values && op.values.length > 0) {
     const values = op.values as string[]
     const hasYes = values.includes('Yes')
@@ -236,9 +236,9 @@ const buildBusinessOwnerFilter = (
     if (hasYes && hasUnknown) {
       return null
     } else if (hasYes) {
-      return Prisma.sql`v."Business_Owner" = 'Owner'`
+      return Prisma.sql`v."Business_Owner" IS NOT NULL`
     } else if (hasUnknown) {
-      return Prisma.sql`v."Business_Owner" != 'Owner'`
+      return Prisma.sql`v."Business_Owner" IS NULL`
     }
   } else if (op.operator === 'is' && op.value === 'not_null') {
     return Prisma.sql`v."Business_Owner" IS NOT NULL`

@@ -15,29 +15,41 @@ const baseScenarios = {
 
 export const options =
   (__ENV && __ENV.ONLY) === 'small'
-    ? { scenarios: { small: baseScenarios.small } }
+    ? { scenarios: { small: { ...baseScenarios.small, startTime: '0s' } } }
     : (__ENV && __ENV.ONLY) === 'large'
-      ? { scenarios: { large: baseScenarios.large } }
+      ? { scenarios: { large: { ...baseScenarios.large, startTime: '0s' } } }
       : { scenarios: baseScenarios }
 
 export function small() {
-  const url = buildUrl('/people/sample', {
+  const url = buildUrl('/people/sample')
+  const body = JSON.stringify({
     state: 'FL',
     districtType: 'City',
     districtName: 'NICEVILLE CITY (EST.)',
     size: 1000,
   })
-  const res = http.get(url, { headers: buildHeaders('perf:sample small') })
+  const res = http.post(url, body, {
+    headers: {
+      ...buildHeaders('perf:sample small'),
+      'Content-Type': 'application/json',
+    },
+  })
   recordMetrics(res)
 }
 
 export function large() {
-  const url = buildUrl('/people/sample', {
+  const url = buildUrl('/people/sample')
+  const body = JSON.stringify({
     state: 'FL',
     districtType: 'City',
     districtName: 'JACKSONVILLE CITY (EST.)',
     size: 1000,
   })
-  const res = http.get(url, { headers: buildHeaders('perf:sample large') })
+  const res = http.post(url, body, {
+    headers: {
+      ...buildHeaders('perf:sample large'),
+      'Content-Type': 'application/json',
+    },
+  })
   recordMetrics(res)
 }

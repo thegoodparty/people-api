@@ -10,27 +10,12 @@ const stateSchema = z.preprocess(
   z.nativeEnum(USState),
 )
 
-const electionYearSchema = z
-  .preprocess(
-    (v) => (v === undefined ? new Date().getFullYear() : v),
-    z.coerce.number().int(),
-  )
-  .optional()
-  .default(new Date().getFullYear())
-
-const booleanDefault = (def: boolean) =>
-  z
-    .preprocess((v) => (v === undefined ? def : v), z.coerce.boolean())
-    .optional()
-    .default(def)
-
 export const listPeopleSchema = z.object({
   state: stateSchema,
   districtType: z.string().optional(),
   districtName: z.string().optional(),
-  electionYear: electionYearSchema,
   filters: filtersSchema,
-  full: booleanDefault(true),
+  search: z.string().optional(),
   resultsPerPage: z.coerce.number().optional().default(50),
   page: z.coerce.number().optional().default(1),
 })
@@ -45,9 +30,7 @@ export const downloadPeopleSchema = z
     districtName: z.string().optional(),
     electionLocation: z.string().optional(),
     electionType: z.string().optional(),
-    electionYear: electionYearSchema,
     filters: filtersSchema,
-    full: booleanDefault(true),
   })
   .refine(
     (v) =>
@@ -57,37 +40,6 @@ export const downloadPeopleSchema = z
   )
 
 export class DownloadPeopleDTO extends createZodDto(downloadPeopleSchema) {}
-
-export const searchPeopleSchema = z
-  .object({
-    state: stateSchema,
-    districtType: z.string().optional(),
-    districtName: z.string().optional(),
-    phone: z.string().optional(),
-    name: z.string().optional(),
-    firstName: z.string().optional(),
-    lastName: z.string().optional(),
-    resultsPerPage: z.coerce
-      .number()
-      .int()
-      .min(1)
-      .max(50)
-      .optional()
-      .default(25),
-    page: z.coerce.number().int().min(1).optional().default(1),
-  })
-  .refine(
-    (v) => !!(v.phone || v.name || v.firstName || v.lastName),
-    'Provide phone or name to search',
-  )
-  .refine(
-    (v) =>
-      (!!v.districtType && !!v.districtName) ||
-      (!v.districtType && !v.districtName),
-    'districtType and districtName are required together unless a valid statewide claim is present',
-  )
-
-export class SearchPeopleDTO extends createZodDto(searchPeopleSchema) {}
 
 export class StatsDTO extends createZodDto(
   z.object({
@@ -102,9 +54,7 @@ export const samplePeopleSchema = z
     state: stateSchema,
     districtType: z.string().optional(),
     districtName: z.string().optional(),
-    electionYear: electionYearSchema,
     size: z.coerce.number().int().min(1).max(10000).optional().default(500),
-    full: booleanDefault(true),
     hasCellPhone: z.coerce.boolean().optional(),
     excludeIds: z.array(z.string().uuid()).optional(),
   })

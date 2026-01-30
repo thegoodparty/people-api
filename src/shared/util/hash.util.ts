@@ -1,4 +1,4 @@
-import murmurhash from "murmurhash"
+import murmurhash from 'murmurhash'
 
 // This is fast, sub-ms
 // For NON-cryptographic use

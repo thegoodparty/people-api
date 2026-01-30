@@ -1,9 +1,15 @@
 import { IncomingMessage } from 'http'
 import { Params } from 'nestjs-pino'
 import { ServerResponse } from 'http'
+import type { GpLogContext } from 'src/monitoring/request-context'
 
 const REQUEST_LOGGED_HEADERS = ['user-agent', 'origin']
 const RESPONSE_LOGGED_HEADERS = ['content-type', 'content-length']
+
+type RequestWithGpContext = IncomingMessage & {
+  id?: string | number
+  gpLogContext?: GpLogContext
+}
 
 export const loggingConfig: Params = {
   pinoHttp: {
@@ -37,8 +43,14 @@ export const loggingConfig: Params = {
         ),
       }),
     },
-    customProps: (req: IncomingMessage) => ({
-      requestId: req.id,
-    }),
+    customProps: (req: IncomingMessage) => {
+      const request = req as RequestWithGpContext
+      const requestId =
+        request.id !== undefined ? String(request.id) : undefined
+      return {
+        ...(requestId ? { requestId } : {}),
+        ...(request.gpLogContext ? { gp: request.gpLogContext } : {}),
+      }
+    },
   },
 }

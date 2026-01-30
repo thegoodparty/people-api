@@ -28,14 +28,26 @@ const error_rate_people_large = new Rate('error_rate_people_large')
 const error_rate_stats_large = new Rate('error_rate_stats_large')
 const error_rate_sample_small = new Rate('error_rate_sample_small')
 
-const cold_first_hit_people_small = new Trend('cold_first_hit_people_small', true)
-const cold_first_hit_people_large = new Trend('cold_first_hit_people_large', true)
+const cold_first_hit_people_small = new Trend(
+  'cold_first_hit_people_small',
+  true,
+)
+const cold_first_hit_people_large = new Trend(
+  'cold_first_hit_people_large',
+  true,
+)
 const cold_first_hit_stats_large = new Trend('cold_first_hit_stats_large', true)
-const cold_first_hit_sample_small = new Trend('cold_first_hit_sample_small', true)
+const cold_first_hit_sample_small = new Trend(
+  'cold_first_hit_sample_small',
+  true,
+)
 
 const firstHitRecorded: Record<string, boolean> = {}
 
-function recordMetricsFor(cohort: string, res: { status: number; timings: { duration: number } }) {
+function recordMetricsFor(
+  cohort: string,
+  res: { status: number; timings: { duration: number } },
+) {
   const failed = res.status === 0 || res.status >= 400
   switch (cohort) {
     case 'people_small':
@@ -73,7 +85,11 @@ function recordMetricsFor(cohort: string, res: { status: number; timings: { dura
   }
 }
 
-function pickCohort(): 'people_small' | 'people_large' | 'stats_large' | 'sample_small' {
+function pickCohort():
+  | 'people_small'
+  | 'people_large'
+  | 'stats_large'
+  | 'sample_small' {
   // Mix A:
   // People small 60%, People large 20%, Stats large 15%, Sample small 5%
   const r = Math.random() * 100
@@ -86,26 +102,42 @@ function pickCohort(): 'people_small' | 'people_large' | 'stats_large' | 'sample
 export function runMixed() {
   const cohort = pickCohort()
   let url = ''
+  let body: string | undefined
+  let method: 'GET' | 'POST' = 'GET'
   let headers: Record<string, string> = {}
 
   if (cohort === 'people_small') {
-    url = buildUrl('/people', {
+    url = buildUrl('/people')
+    method = 'POST'
+    body = JSON.stringify({
       state: 'WY',
       districtType: 'County_Commissioner_District',
       districtName: 'SWEETWATER CNTY-ROCK SPRINGS NORTH CCD (EST.)',
-      'filter[gender][is]': 'not_null',
-      'filter[educationOfPerson][is]': 'not_null',
+      filters: {
+        gender: { is: 'not_null' },
+        educationLevel: { is: 'not_null' },
+      },
     })
-    headers = buildHeaders('perf:mixed people small')
+    headers = {
+      ...buildHeaders('perf:mixed people small'),
+      'Content-Type': 'application/json',
+    }
   } else if (cohort === 'people_large') {
-    url = buildUrl('/people', {
+    url = buildUrl('/people')
+    method = 'POST'
+    body = JSON.stringify({
       state: 'TX',
       districtType: 'City',
       districtName: 'DALLAS CITY (EST.)',
-      'filter[gender][is]': 'not_null',
-      'filter[educationOfPerson][is]': 'not_null',
+      filters: {
+        gender: { is: 'not_null' },
+        educationLevel: { is: 'not_null' },
+      },
     })
-    headers = buildHeaders('perf:mixed people large')
+    headers = {
+      ...buildHeaders('perf:mixed people large'),
+      'Content-Type': 'application/json',
+    }
   } else if (cohort === 'stats_large') {
     url = buildUrl('/people/stats', {
       state: 'WI',
@@ -114,16 +146,23 @@ export function runMixed() {
     })
     headers = buildHeaders('perf:mixed stats large')
   } else {
-    url = buildUrl('/people/sample', {
+    url = buildUrl('/people/sample')
+    method = 'POST'
+    body = JSON.stringify({
       state: 'FL',
       districtType: 'City',
       districtName: 'NICEVILLE CITY (EST.)',
       size: 1000,
     })
-    headers = buildHeaders('perf:mixed sample small')
+    headers = {
+      ...buildHeaders('perf:mixed sample small'),
+      'Content-Type': 'application/json',
+    }
   }
 
-  const res = http.get(url, { headers })
+  const res =
+    method === 'POST' && body
+      ? http.post(url, body, { headers })
+      : http.get(url, { headers })
   recordMetricsFor(cohort, res)
 }
-

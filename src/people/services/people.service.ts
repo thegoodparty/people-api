@@ -3,193 +3,79 @@ import {
   DownloadPeopleDTO,
   ListPeopleDTO,
   SamplePeopleDTO,
-  SearchPeopleDTO,
-  ListPeopleSchema,
 } from '../people.schema'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
 import { SampleService } from './sample.service'
 
-import { buildVoterSelect } from '../people.select'
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common'
+import { Injectable, NotFoundException } from '@nestjs/common'
 import { buildVoterFiltersSql } from '../utils/filters.sql.utils'
 import { FastifyReply } from 'fastify'
 import { format } from '@fast-csv/format'
 import type { RowMap } from '@fast-csv/format'
 import { DistrictService } from 'src/district/services/district.service'
-import {
-  transformToPersonOutputArray,
-  transformToPersonOutput,
-} from '../utils/transformToPersonOutput.utils'
+import { transformToPersonOutput } from '../utils/transformToPersonOutput.utils'
 import { FilterData } from '../schemas/filters.schema'
-import { DefaultArgs } from '@prisma/client/runtime/library'
+import { StatsService } from './stats.service'
+import {
+  buildVoterSelectSql,
+  BaseDbPerson,
+  ExtraSelectedField,
+} from '../people.select'
 
 export const DATABASE_SCHEMA = 'green'
+
 const VOTER_TABLENAME = 'Voter'
 const DISTRICTVOTER_TABLENAME = 'DistrictVoter'
+
+const getNormalizedPhoneNumber = (phone: string): string | null => {
+  if (!/^\d+$/.test(phone)) {
+    return null
+  }
+
+  if (![11, 10].includes(phone.length)) {
+    return null
+  }
+
+  const digits =
+    phone.length === 11 && phone.startsWith('1') ? phone.slice(1) : phone
+
+  const area = digits.slice(0, 3)
+  const prefix = digits.slice(3, 6)
+  const line = digits.slice(6)
+  return `(${area}) ${prefix}-${line}`
+}
 
 @Injectable()
 export class PeopleService extends createPrismaBase(MODELS.Voter) {
   constructor(
     private readonly sampleService: SampleService,
     private readonly districtService: DistrictService,
+    private readonly statsService: StatsService,
   ) {
     super()
   }
 
-  private normalizePhone(input: string): string | null {
-    const digits = (input || '').replace(/\D/g, '')
-    if (digits.length === 11 && digits.startsWith('1')) return digits.slice(1)
-    if (digits.length === 10) return digits
-    return null
-  }
+  async findPerson(id: string, state: string) {
+    const select = buildVoterSelectSql().sql
 
-  private formatStoredPhoneFromDigits(digits: string): string {
-    const area = digits.slice(0, 3)
-    const prefix = digits.slice(3, 6)
-    const line = digits.slice(6)
-    return `(${area}) ${prefix}-${line}`
-  }
-
-  async searchVoters(dto: SearchPeopleDTO) {
-    const {
-      state,
-      districtType,
-      districtName,
-      phone,
-      name,
-      firstName,
-      lastName,
-      resultsPerPage,
-      page,
-    } = dto
-
-    const districtId =
-      districtType && districtName
-        ? await this.districtService.findDistrictId({
-            state,
-            type: districtType,
-            name: districtName,
-          })
-        : null
-
-    const tokens = (name || '').trim().split(/\s+/).filter(Boolean)
-
-    if (phone) {
-      const normalized = this.normalizePhone(phone)
-      if (!normalized) {
-        throw new BadRequestException(
-          'Invalid phone number; expected 10 digits',
-        )
-      }
-    }
-
-    const take = resultsPerPage
-    const skip = (page - 1) * resultsPerPage
-
-    const select: Prisma.VoterSelect = {
-      id: true,
-      LALVOTERID: true,
-      State: true,
-      FirstName: true,
-      MiddleName: true,
-      LastName: true,
-      NameSuffix: true,
-      VoterTelephones_CellPhoneFormatted: true,
-      VoterTelephones_LandlineFormatted: true,
-      Residence_Addresses_City: true,
-      Residence_Addresses_State: true,
-      Residence_Addresses_Zip: true,
-      Parties_Description: true,
-    }
-
-    const whereClause = this.rawBuildWhere({
-      state,
-      districtId,
-      search: { phone, firstName, lastName, tokens },
-    })
-    const voterTable = Prisma.raw(`"${DATABASE_SCHEMA}"."${VOTER_TABLENAME}"`)
-    const dvTable = Prisma.raw(
-      `"${DATABASE_SCHEMA}"."${DISTRICTVOTER_TABLENAME}"`,
+    const result = await this.client.$queryRaw<BaseDbPerson[]>(
+      Prisma.sql`${select} FROM "green"."Voter" v WHERE v."id" = ${id}::uuid AND v."State" = CAST(${state}::text AS "public"."USState")`,
     )
-    let countRows: { voter_count: bigint }[]
-
-    let results: Array<{
-      [K in keyof typeof select]: string | number | boolean | null
-    }>
-    if (districtId) {
-      countRows = await this.client.$queryRaw<{ voter_count: bigint }[]>(
-        Prisma.sql`SELECT COUNT(*)::bigint AS voter_count
-        FROM ${voterTable} v
-        JOIN ${dvTable} dv
-          ON v."State" = dv."State" AND v."id" = dv."voter_id"
-        ${whereClause}`,
-      )
-      results = await this.client.$queryRaw<
-        Array<{
-          [K in keyof typeof select]: string | number | boolean | null
-        }>
-      >(
-        this.buildRawPeopleQuery({
-          districtId,
-          select,
-          whereClause,
-          take,
-          skip,
-          includeCursor: false,
-        }),
-      )
-    } else {
-      countRows = await this.client.$queryRaw<{ voter_count: bigint }[]>(
-        Prisma.sql`SELECT COUNT(*)::bigint AS voter_count
-        FROM ${voterTable} v
-        ${whereClause}`,
-      )
-      const selectKeys = Object.keys(select)
-      const selectFields = selectKeys.map((k) => Prisma.raw(`v."${k}"`))
-      results = await this.client.$queryRaw<
-        Array<{
-          [K in keyof typeof select]: string | number | boolean | null
-        }>
-      >(
-        Prisma.sql`SELECT ${Prisma.join(selectFields, ', ')}
-        FROM ${voterTable} v
-        ${whereClause}
-        ORDER BY v."id"
-        LIMIT ${take} OFFSET ${skip}`,
-      )
+    if (!result.length) {
+      throw new NotFoundException(`Person with ID ${id} not found`)
     }
-    const totalResults = Number(countRows[0]?.voter_count ?? 0n)
-    const totalPages = Math.max(1, Math.ceil(totalResults / resultsPerPage))
-    const currentPage = Math.min(Math.max(1, page), totalPages)
-    return {
-      pagination: {
-        totalResults,
-        currentPage,
-        pageSize: resultsPerPage,
-        totalPages,
-        hasNextPage: currentPage < totalPages,
-        hasPreviousPage: currentPage > 1,
-      },
-      people: transformToPersonOutputArray(results),
-    }
+    return transformToPersonOutput(result[0])
   }
 
-  async findPeople(dto: ListPeopleDTO) {
-    const {
-      state,
-      districtType = '',
-      districtName = '',
-      electionYear,
-      resultsPerPage,
-      page,
-      filters,
-      full = true,
-    } = dto as ListPeopleSchema
-
+  async findPeople({
+    state,
+    districtType = '',
+    districtName = '',
+    resultsPerPage,
+    page,
+    filters,
+    search,
+  }: ListPeopleDTO) {
     let resolvedDistrictId: string | null = null
     if (districtName && districtType) {
       const resolvedDistrict = await this.districtService.findFirst({
@@ -208,33 +94,24 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       resolvedDistrictId = resolvedDistrict.id
     }
 
-    const totalResultsPromise = this.rawCountForDistrict({
-      state,
-      districtId: resolvedDistrictId,
-      filters,
-      electionYear,
-    })
-
-    const select = this.buildVoterSelect(full, electionYear)
-
     const [totalResults, people] = await Promise.all([
-      totalResultsPromise,
-      this.client.$queryRaw<
-        Array<{
-          [K in keyof typeof select]: string | number | boolean | null
-        }>
-      >(
+      this.rawCountForDistrict({
+        state,
+        districtId: resolvedDistrictId,
+        filters,
+        search,
+      }),
+      this.client.$queryRaw<Array<BaseDbPerson>>(
         this.buildRawPeopleQuery({
           districtId: resolvedDistrictId,
-          select,
           whereClause: this.rawBuildWhere({
             state,
             districtId: resolvedDistrictId,
-            voterFiltersSql: buildVoterFiltersSql(filters),
+            filters,
+            search,
           }),
           take: resultsPerPage,
           skip: (page - 1) * resultsPerPage,
-          includeCursor: false,
         }),
       ),
     ])
@@ -249,19 +126,12 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
         hasNextPage: currentPage < totalPages,
         hasPreviousPage: currentPage > 1,
       },
-      people: transformToPersonOutputArray(people),
+      people: people.map(transformToPersonOutput),
     }
   }
 
   async streamPeopleCsv(dto: DownloadPeopleDTO, res: FastifyReply) {
-    const {
-      state,
-      electionYear = new Date().getFullYear(),
-      full = true,
-      filters,
-      districtType,
-      districtName,
-    } = dto
+    const { state, filters, districtType, districtName } = dto
 
     let resolvedDistrictId: string | null = null
     if (districtType && districtName) {
@@ -283,16 +153,44 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     const whereClause = this.rawBuildWhere({
       districtId: resolvedDistrictId,
       state,
-      voterFiltersSql: buildVoterFiltersSql(filters),
+      filters,
     })
 
-    const select = this.buildVoterSelect(full, electionYear)
-    const selectedColumns = Object.keys(select)
+    const extraFields: ExtraSelectedField[] = [
+      'AnyElection_2017',
+      'AnyElection_2019',
+      'AnyElection_2021',
+      'AnyElection_2023',
+      'AnyElection_2025',
+      'General_2016',
+      'General_2018',
+      'General_2020',
+      'General_2022',
+      'General_2024',
+      'General_2026',
+      'OtherElection_2016',
+      'OtherElection_2018',
+      'OtherElection_2020',
+      'OtherElection_2022',
+      'OtherElection_2024',
+      'OtherElection_2026',
+      'PresidentialPrimary_2016',
+      'PresidentialPrimary_2020',
+      'PresidentialPrimary_2024',
+      'Primary_2016',
+      'Primary_2018',
+      'Primary_2020',
+      'Primary_2022',
+      'Primary_2024',
+      'Primary_2026',
+    ]
 
-    const headers = [...selectedColumns, 'electionLocation', 'electionType']
+    const { columnNames } = buildVoterSelectSql(extraFields)
 
     type ExportRow = RowMap<string | number | null | undefined>
-    const csvStream = format<ExportRow, ExportRow>({ headers })
+    const csvStream = format<ExportRow, ExportRow>({
+      headers: [...columnNames, 'electionLocation', 'electionType'],
+    })
     csvStream.pipe(res.raw)
 
     const pageSize = 5000
@@ -308,21 +206,15 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       for (;;) {
         if (aborted) break
         const page = await this.client.$queryRaw<
-          Array<
-            {
-              __cursor_id: string
-            } & {
-              [K in keyof typeof select]: string | number | boolean | null
-            }
-          >
+          Array<Record<string, unknown>>
         >(
           this.buildRawPeopleQuery({
             districtId: resolvedDistrictId,
-            select,
             whereClause,
             take: pageSize,
             skip: 0,
             afterId: lastId,
+            extraFields,
           }),
         )
         if (!page.length) break
@@ -331,7 +223,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
         for (const person of page) {
           if (aborted) break
           const row: ExportRow = {}
-          for (const key of selectedColumns) {
+          for (const key of columnNames) {
             row[key] = person[key as keyof typeof person] as CsvValue
           }
           row.electionLocation = districtType ?? ''
@@ -345,7 +237,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
           }
         }
 
-        lastId = page[page.length - 1].__cursor_id
+        lastId = page[page.length - 1].id as string
         if (page.length < pageSize) break
       }
     } finally {
@@ -357,20 +249,17 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
   async samplePeople(dto: SamplePeopleDTO) {
     return this.sampleService
       .samplePeople(dto)
-      .then(transformToPersonOutputArray)
+      .then((people) => people.map(transformToPersonOutput))
   }
+
   private rawBuildWhere(args: {
     state: string
     districtId?: string | null
-    search?: {
-      phone?: string
-      firstName?: string
-      lastName?: string
-      tokens?: string[]
-    }
-    voterFiltersSql?: Prisma.Sql | null
+    filters: FilterData
+    search?: string
   }): Prisma.Sql {
-    const { state, districtId, search, voterFiltersSql } = args
+    const { state, districtId } = args
+
     const parts: Prisma.Sql[] = []
     parts.push(
       Prisma.sql`v."State" = CAST(${state}::text AS "public"."USState")`,
@@ -382,39 +271,27 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       parts.push(Prisma.sql`dv."district_id" = ${districtId}::uuid`)
       parts.push(Prisma.sql`dv."voter_id" IS NOT NULL`)
     }
+    const search = args.search?.trim()
     if (search) {
-      if (search.phone) {
-        const digits = (search.phone || '').replace(/\D/g, '')
-        const normalized =
-          digits.length === 11 && digits.startsWith('1')
-            ? digits.slice(1)
-            : digits.length === 10
-              ? digits
-              : null
-        if (normalized) {
-          const formatted = this.formatStoredPhoneFromDigits(normalized)
-          parts.push(
-            Prisma.sql`(v."VoterTelephones_CellPhoneFormatted" = ${formatted} OR v."VoterTelephones_LandlineFormatted" = ${formatted})`,
-          )
-        }
+      const phone = getNormalizedPhoneNumber(search)
+      if (phone) {
+        parts.push(
+          Prisma.sql`(v."VoterTelephones_CellPhoneFormatted" = ${phone} OR v."VoterTelephones_LandlineFormatted" = ${phone})`,
+        )
       } else {
-        const tokens = (search.tokens || []).filter(Boolean)
-        const explicitFirst = Boolean(search.firstName)
-        const explicitLast = Boolean(search.lastName)
-        const twoTokens = tokens.length > 1
-        if ((explicitFirst && explicitLast) || twoTokens) {
-          const fn = search.firstName ?? tokens[0]
-          const ln = search.lastName ?? tokens[tokens.length - 1]
-          parts.push(Prisma.sql`v."FirstName" = ${fn}`)
-          parts.push(Prisma.sql`v."LastName" = ${ln}`)
-        } else if (tokens.length > 0 || search.firstName || search.lastName) {
-          const single = search.firstName ?? search.lastName ?? tokens[0]
+        const tokens = search.split(/\s+/).filter(Boolean)
+        if (tokens.length === 1) {
           parts.push(
-            Prisma.sql`(v."FirstName" = ${single} OR v."LastName" = ${single})`,
+            Prisma.sql`(v."FirstName" = ${tokens[0]} OR v."LastName" = ${tokens[0]})`,
+          )
+        } else if (tokens.length >= 2) {
+          parts.push(
+            Prisma.sql`(v."FirstName" = ${tokens[0]} AND v."LastName" = ${tokens[1]})`,
           )
         }
       }
     }
+    const voterFiltersSql = buildVoterFiltersSql(args.filters)
     if (voterFiltersSql) {
       parts.push(voterFiltersSql)
     }
@@ -422,41 +299,28 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       ? Prisma.sql`WHERE ${Prisma.join(parts, ' AND ')}`
       : Prisma.empty
   }
-  private buildVoterSelect(
-    full: boolean,
-    electionYear: number,
-  ): Prisma.VoterSelect {
-    return buildVoterSelect(full, electionYear)
-  }
 
   private async rawCountForDistrict(args: {
     state: string
     districtId: string | null
     filters: FilterData
-    electionYear: number
+    search?: string
   }): Promise<number> {
-    const { state, districtId, electionYear: _electionYear } = args
+    const { state, districtId, search } = args
 
-    const voterFiltersSql = buildVoterFiltersSql(args.filters)
-    if (!voterFiltersSql) {
-      if (districtId) {
-        const rows = await this.client.$queryRaw<{ voter_count: bigint }[]>(
-          Prisma.sql`SELECT COUNT(*)::bigint AS voter_count
-            FROM "green"."DistrictVoter" dv
-            WHERE dv."State" = CAST(${state}::text AS "public"."USState")
-              AND dv."district_id" = ${districtId}::uuid`,
-        )
-        const count = rows[0]?.voter_count ?? 0n
-        return Number(count)
-      }
-      const rows = await this.client.$queryRaw<{ voter_count: bigint }[]>(
-        Prisma.sql`SELECT COUNT(*)::bigint AS voter_count
-          FROM "green"."Voter" v
-          WHERE v."State" = CAST(${state}::text AS "public"."USState")`,
-      )
-      const count = rows[0]?.voter_count ?? 0n
-      return Number(count)
+    if (districtId && !args.search && Object.keys(args.filters).length === 0) {
+      const { totalConstituents } =
+        await this.statsService.getTotalCounts(districtId)
+      return totalConstituents
     }
+
+    const whereClause = this.rawBuildWhere({
+      state,
+      districtId,
+      search,
+      filters: args.filters,
+    })
+
     if (districtId) {
       const rows = await this.client.$queryRaw<{ voter_count: bigint }[]>(
         Prisma.sql`SELECT COUNT(*)::bigint AS voter_count
@@ -464,9 +328,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
           JOIN "green"."Voter" v
             ON v."State" = dv."State"
            AND v."id"    = dv."voter_id"
-          WHERE dv."State" = CAST(${state}::text AS "public"."USState")
-            AND dv."district_id" = ${districtId}::uuid
-            AND ${voterFiltersSql}`,
+          ${whereClause}`,
       )
       const count = rows[0]?.voter_count ?? 0n
       return Number(count)
@@ -474,45 +336,27 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     const rows = await this.client.$queryRaw<{ voter_count: bigint }[]>(
       Prisma.sql`SELECT COUNT(*)::bigint AS voter_count
         FROM "green"."Voter" v
-        WHERE v."State" = CAST(${state}::text AS "public"."USState")
-          AND ${voterFiltersSql}`,
+        ${whereClause}`,
     )
     const count = rows[0]?.voter_count ?? 0n
     return Number(count)
   }
 
-  transformToPersonOutput(person: Record<string, unknown>) {
-    return transformToPersonOutput(person)
-  }
-
   private buildRawPeopleQuery(args: {
     districtId: string | null
-    select: Prisma.VoterSelect<DefaultArgs>
     whereClause: Prisma.Sql
     take: number
     skip: number
     afterId?: string
-    includeCursor?: boolean
+    extraFields?: ExtraSelectedField[]
   }): Prisma.Sql {
-    const {
-      districtId,
-      select,
-      whereClause,
-      take,
-      skip,
-      afterId,
-      includeCursor,
-    } = args
+    const { districtId, whereClause, take, skip, afterId } = args
+
+    const selectSql = buildVoterSelectSql(args.extraFields)
     const voterTable = Prisma.raw(`"${DATABASE_SCHEMA}"."${VOTER_TABLENAME}"`)
     const dvTable = Prisma.raw(
       `"${DATABASE_SCHEMA}"."${DISTRICTVOTER_TABLENAME}"`,
     )
-    const selectKeys = Object.keys(select)
-    const selectFields = selectKeys.map((k) => Prisma.raw(`v."${k}"`))
-    const selectList =
-      includeCursor === false
-        ? selectFields
-        : [...selectFields, Prisma.raw(`v."id" AS "__cursor_id"`)]
     const joinClause = districtId
       ? Prisma.sql`JOIN ${dvTable} dv
             ON v."State" = dv."State" AND v."id" = dv."voter_id"`
@@ -522,7 +366,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
       : Prisma.empty
     const offsetClause = afterId ? Prisma.empty : Prisma.sql` OFFSET ${skip}`
 
-    return Prisma.sql`SELECT ${Prisma.join(selectList, ', ')}
+    return Prisma.sql`${selectSql.sql}
           FROM ${voterTable} v
           ${joinClause}
           ${whereClause}${cursorClause}
