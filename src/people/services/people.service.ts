@@ -62,38 +62,26 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
   ) {
     const select = buildVoterSelectSql().sql
 
-    if (districtType && districtName) {
-      const district = await this.client.district.findFirst({
-        where: {
-          type: districtType,
-          name: districtName,
-          state: state as $Enums.DistrictUSState,
-        },
-        select: {
-          id: true,
-        },
-      })
-      if (!district?.id) {
-        throw new NotFoundException(
-          `District not found for state=${state} type=${districtType} name=${districtName}`,
-        )
-      }
-
-      const districtVoter = await this.client.districtVoter.findFirst({
-        where: {
-          districtId: district.id,
-          voterId: id,
-        },
-      })
-      if (!districtVoter) {
-        throw new NotFoundException('Person not found in district')
-      }
-    }
+    const districtExistsClause =
+      districtType && districtName
+        ? Prisma.sql`AND EXISTS (
+            SELECT 1
+            FROM green."DistrictVoter" dv
+            JOIN green."District" d ON d."id" = dv."district_id"
+            WHERE dv."voter_id" = v."id"
+              AND d."state" = CAST(${state}::text AS green."USState")
+              AND d."type" = ${districtType}
+              AND d."name" = ${districtName}
+          )`
+        : Prisma.empty
 
     const result = await this.client.$queryRaw<BaseDbPerson[]>(
-      Prisma.sql`${select} FROM "green"."Voter" v WHERE v."id" = ${id}::uuid AND v."State" = CAST(${state}::text AS "public"."USState")`,
+      Prisma.sql`${select} FROM "green"."Voter" v WHERE v."id" = ${id}::uuid AND v."State" = CAST(${state}::text AS "public"."USState") ${districtExistsClause}`,
     )
     if (!result.length) {
+      if (districtType && districtName) {
+        throw new NotFoundException('Person not found in district')
+      }
       throw new NotFoundException(`Person with ID ${id} not found`)
     }
     return transformToPersonOutput(result[0])
