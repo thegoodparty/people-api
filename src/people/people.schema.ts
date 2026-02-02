@@ -25,7 +25,6 @@ export class ListPeopleDTO extends createZodDto(listPeopleSchema) {}
 export const downloadPeopleSchema = z
   .object({
     state: stateSchema,
-    // Support both naming conventions; aliases are optional
     districtType: z.string().optional(),
     districtName: z.string().optional(),
     electionLocation: z.string().optional(),
@@ -36,7 +35,7 @@ export const downloadPeopleSchema = z
     (v) =>
       (!!v.districtType && !!v.districtName) ||
       (!v.districtType && !v.districtName),
-    'districtType and districtName are required together unless a valid statewide claim is present',
+    'districtType and districtName are required together',
   )
 
 export class DownloadPeopleDTO extends createZodDto(downloadPeopleSchema) {}
@@ -62,21 +61,30 @@ export const samplePeopleSchema = z
     (v) =>
       (!!v.districtType && !!v.districtName) ||
       (!v.districtType && !v.districtName),
-    'districtType and districtName are required together unless a valid statewide claim is present',
+    'districtType and districtName are required together',
   )
 
 export class SamplePeopleDTO extends createZodDto(samplePeopleSchema) {}
 
-const getPersonParamsSchema = z.object({
-  id: z.string().uuid(),
-})
-
-export class GetPersonParamsDTO extends createZodDto(getPersonParamsSchema) {}
+export class GetPersonParamsDTO extends createZodDto(
+  z.object({
+    id: z.string().uuid(),
+  }),
+) {}
 
 export class GetPersonQueryDTO extends createZodDto(
-  z.object({
-    state: stateSchema,
-  }),
+  z
+    .object({
+      state: stateSchema,
+      districtType: z.string().optional(),
+      districtName: z.string().optional(),
+    })
+    .refine(
+      (v) =>
+        (!!v.districtType && !!v.districtName) ||
+        (!v.districtType && !v.districtName),
+      'districtType and districtName are required together',
+    ),
 ) {}
 
 export type ListPeopleSchema = z.infer<typeof listPeopleSchema>
