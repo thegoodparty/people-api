@@ -31,6 +31,11 @@ export const createStringFilterSchema = () => {
     }, 'Exactly one operator (in, eq, or is) must be specified')
 }
 
+const rangeConditionSchema = z.object({
+  gte: z.coerce.number().optional(),
+  lte: z.coerce.number().optional(),
+})
+
 export const createNumericFilterSchema = () => {
   return z
     .object({
@@ -39,8 +44,9 @@ export const createNumericFilterSchema = () => {
       gte: z.coerce.number().optional(),
       lte: z.coerce.number().optional(),
       is: z.enum(['not_null', 'null']).optional(),
+      _or: z.array(rangeConditionSchema).optional(),
+      _includeNull: z.boolean().optional(),
     })
-    .passthrough()
     .refine((data) => {
       const operatorCount = [
         data.in,
@@ -48,9 +54,15 @@ export const createNumericFilterSchema = () => {
         data.gte,
         data.lte,
         data.is,
+        data._or,
       ].filter((value) => value !== undefined).length
       return operatorCount >= 1
     }, 'At least one operator must be specified')
+}
+
+export type RangeCondition = {
+  gte?: number
+  lte?: number
 }
 
 export type FilterOperator = {
@@ -60,6 +72,7 @@ export type FilterOperator = {
   gte?: number
   lte?: number
   includeNull?: boolean
+  orRanges?: RangeCondition[]
 }
 
 export type TransformFiltersResult<T extends string> = {
@@ -122,6 +135,21 @@ export const transformFilters = <T extends string>(
       if (isValue === 'null') {
         filterValues[key] = []
       }
+    } else if (
+      value &&
+      typeof value === 'object' &&
+      '_or' in value &&
+      Array.isArray(value._or)
+    ) {
+      filterList.push(key as T)
+      const includeNull = '_includeNull' in value && value._includeNull === true
+      const orRanges = (value._or as Array<{ gte?: number; lte?: number }>).map(
+        (range) => ({
+          gte: range.gte,
+          lte: range.lte,
+        }),
+      )
+      filterOperators[key] = { operator: 'or', orRanges, includeNull }
     } else if (
       value &&
       typeof value === 'object' &&

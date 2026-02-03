@@ -350,6 +350,21 @@ const buildNumericFilter = (
     baseSql = Prisma.sql`v."${Prisma.raw(fieldName)}" >= ${Number(op.value)}`
   } else if (op.operator === 'lte' && op.value !== undefined) {
     baseSql = Prisma.sql`v."${Prisma.raw(fieldName)}" <= ${Number(op.value)}`
+  } else if (op.operator === 'or' && op.orRanges && op.orRanges.length > 0) {
+    const orClauses = op.orRanges.map((range) => {
+      if (range.gte !== undefined && range.lte !== undefined) {
+        return Prisma.sql`(v."${Prisma.raw(fieldName)}" >= ${Number(range.gte)} AND v."${Prisma.raw(fieldName)}" <= ${Number(range.lte)})`
+      } else if (range.gte !== undefined) {
+        return Prisma.sql`v."${Prisma.raw(fieldName)}" >= ${Number(range.gte)}`
+      } else if (range.lte !== undefined) {
+        return Prisma.sql`v."${Prisma.raw(fieldName)}" <= ${Number(range.lte)}`
+      }
+      return null
+    }).filter((clause): clause is Prisma.Sql => clause !== null)
+
+    if (orClauses.length > 0) {
+      baseSql = Prisma.sql`(${Prisma.join(orClauses, ' OR ')})`
+    }
   } else if (op.operator === 'is' && op.value === 'not_null') {
     return Prisma.sql`v."${Prisma.raw(fieldName)}" IS NOT NULL`
   } else if (op.operator === 'is' && op.value === 'null') {
