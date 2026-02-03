@@ -17,10 +17,7 @@ describe('buildVoterFiltersSql', () => {
         filterOperators: {
           estimatedIncomeAmountInt: {
             operator: 'or',
-            orRanges: [
-              { gte: 0, lte: 24999 },
-              { gte: 200000 },
-            ],
+            orRanges: [{ gte: 0, lte: 24999 }, { gte: 200000 }],
           },
         },
       }

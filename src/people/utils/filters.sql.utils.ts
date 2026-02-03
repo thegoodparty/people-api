@@ -351,18 +351,20 @@ const buildNumericFilter = (
   } else if (op.operator === 'lte' && op.value !== undefined) {
     baseSql = Prisma.sql`v."${Prisma.raw(fieldName)}" <= ${Number(op.value)}`
   } else if (op.operator === 'or' && op.orRanges) {
-    const orClauses = op.orRanges.map((range) => {
-      const hasGte = range.gte !== undefined && range.gte !== null
-      const hasLte = range.lte !== undefined && range.lte !== null
-      if (hasGte && hasLte) {
-        return Prisma.sql`(v."${Prisma.raw(fieldName)}" >= ${Number(range.gte)} AND v."${Prisma.raw(fieldName)}" <= ${Number(range.lte)})`
-      } else if (hasGte) {
-        return Prisma.sql`v."${Prisma.raw(fieldName)}" >= ${Number(range.gte)}`
-      } else if (hasLte) {
-        return Prisma.sql`v."${Prisma.raw(fieldName)}" <= ${Number(range.lte)}`
-      }
-      return null
-    }).filter((clause): clause is Prisma.Sql => clause !== null)
+    const orClauses = op.orRanges
+      .map((range) => {
+        const hasGte = range.gte !== undefined && range.gte !== null
+        const hasLte = range.lte !== undefined && range.lte !== null
+        if (hasGte && hasLte) {
+          return Prisma.sql`(v."${Prisma.raw(fieldName)}" >= ${Number(range.gte)} AND v."${Prisma.raw(fieldName)}" <= ${Number(range.lte)})`
+        } else if (hasGte) {
+          return Prisma.sql`v."${Prisma.raw(fieldName)}" >= ${Number(range.gte)}`
+        } else if (hasLte) {
+          return Prisma.sql`v."${Prisma.raw(fieldName)}" <= ${Number(range.lte)}`
+        }
+        return null
+      })
+      .filter((clause): clause is Prisma.Sql => clause !== null)
 
     if (orClauses.length > 0) {
       baseSql = Prisma.sql`(${Prisma.join(orClauses, ' OR ')})`
