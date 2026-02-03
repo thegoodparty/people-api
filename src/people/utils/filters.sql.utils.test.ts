@@ -167,6 +167,63 @@ describe('buildVoterFiltersSql', () => {
       const orCount = (sqlStr.match(/OR/g) || []).length
       expect(orCount).toBe(2)
     })
+
+    it('returns IS NULL when orRanges empty but includeNull is true', () => {
+      const filterData: FilterData = {
+        filters: ['estimatedIncomeAmountInt'],
+        filterValues: {},
+        filterOperators: {
+          estimatedIncomeAmountInt: {
+            operator: 'or',
+            orRanges: [],
+            includeNull: true,
+          },
+        },
+      }
+
+      const result = buildVoterFiltersSql(filterData)
+      const sqlStr = sqlToString(result)
+
+      expect(sqlStr).toContain('IS NULL')
+    })
+
+    it('returns IS NULL when all orRanges invalid but includeNull is true', () => {
+      const filterData: FilterData = {
+        filters: ['estimatedIncomeAmountInt'],
+        filterValues: {},
+        filterOperators: {
+          estimatedIncomeAmountInt: {
+            operator: 'or',
+            orRanges: [{}],
+            includeNull: true,
+          },
+        },
+      }
+
+      const result = buildVoterFiltersSql(filterData)
+      const sqlStr = sqlToString(result)
+
+      expect(sqlStr).toContain('IS NULL')
+    })
+
+    it('handles null gte in orRanges as unbounded lower', () => {
+      const filterData: FilterData = {
+        filters: ['estimatedIncomeAmountInt'],
+        filterValues: {},
+        filterOperators: {
+          estimatedIncomeAmountInt: {
+            operator: 'or',
+            orRanges: [{ gte: null as unknown as number, lte: 100 }],
+          },
+        },
+      }
+
+      const result = buildVoterFiltersSql(filterData)
+      const sqlStr = sqlToString(result)
+
+      expect(sqlStr).toContain('<=')
+      expect(sqlStr).not.toContain('>=')
+    })
   })
 
   describe('existing operators still work', () => {
