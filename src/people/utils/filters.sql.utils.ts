@@ -275,21 +275,21 @@ const buildLanguageFilter = (
 
   if (hasEnglish && hasSpanish && hasOther) {
     return null
-  } else if (hasEnglish && hasSpanish) {
-    return Prisma.sql`v."Language_Code" = ANY(ARRAY['English', 'Spanish']::text[])`
-  } else if (hasEnglish && hasOther) {
-    return Prisma.sql`v."Language_Code" != 'Spanish'`
-  } else if (hasSpanish && hasOther) {
-    return Prisma.sql`v."Language_Code" != 'English'`
-  } else if (hasEnglish) {
-    return Prisma.sql`v."Language_Code" = 'English'`
-  } else if (hasSpanish) {
-    return Prisma.sql`v."Language_Code" = 'Spanish'`
-  } else if (hasOther) {
-    return Prisma.sql`v."Language_Code" != ALL(ARRAY['English', 'Spanish']::text[])`
+  }
+  const conditions: Prisma.Sql[] = []
+  if (hasEnglish) {
+    conditions.push(Prisma.sql`v."Language_Code" = 'English'`)
+  }
+  if (hasSpanish) {
+    conditions.push(Prisma.sql`v."Language_Code" = 'Spanish'`)
+  }
+  if (hasOther) {
+    conditions.push(
+      Prisma.sql`(v."Language_Code" != ALL(ARRAY['English', 'Spanish']::text[]) OR v."Language_Code" IS NULL)`,
+    )
   }
 
-  return null
+  return Prisma.sql`(${Prisma.join(conditions, ' OR ')})`
 }
 
 const buildBooleanFilter = (
