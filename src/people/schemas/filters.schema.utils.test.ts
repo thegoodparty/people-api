@@ -12,10 +12,7 @@ describe('transformFilters', () => {
     it('transforms _or with multiple ranges into or operator', () => {
       const filters = {
         estimatedIncomeAmountInt: {
-          _or: [
-            { gte: 0, lte: 24999 },
-            { gte: 200000 },
-          ],
+          _or: [{ gte: 0, lte: 24999 }, { gte: 200000 }],
         },
       }
 
@@ -172,7 +169,23 @@ describe('transformFilters', () => {
 
       const result = transformFilters(filters, mockSchemaShape)
 
-      expect(result.filterOperators.estimatedIncomeAmountInt.operator).toBe('or')
+      expect(result.filterOperators.estimatedIncomeAmountInt.operator).toBe(
+        'or',
+      )
+    })
+
+    it('handles is operator taking precedence over _or', () => {
+      const filters = {
+        estimatedIncomeAmountInt: {
+          is: 'null',
+          _or: [{ gte: 0, lte: 24999 }],
+        },
+      }
+
+      const result = transformFilters(filters, mockSchemaShape)
+
+      expect(result.filterOperators.estimatedIncomeAmountInt.operator).toBe('is')
+      expect(result.filterOperators.estimatedIncomeAmountInt.value).toBe('null')
     })
 
     it('ignores _includeNull when false', () => {
@@ -209,7 +222,9 @@ describe('transformFilters', () => {
 
       const result = transformFilters(filters, mockSchemaShape)
 
-      expect(result.filterOperators.estimatedIncomeAmountInt.orRanges).toHaveLength(9)
+      expect(
+        result.filterOperators.estimatedIncomeAmountInt.orRanges,
+      ).toHaveLength(9)
     })
 
     it('skips filters not in schema shape', () => {
