@@ -145,8 +145,8 @@ export const transformFilters = <T extends string>(
       const includeNull = '_includeNull' in value && value._includeNull === true
       const orRanges = (value._or as Array<{ gte?: number; lte?: number }>).map(
         (range) => ({
-          gte: range.gte,
-          lte: range.lte,
+          gte: range.gte !== undefined && range.gte !== null ? range.gte : undefined,
+          lte: range.lte !== undefined && range.lte !== null ? range.lte : undefined,
         }),
       )
       filterOperators[key] = { operator: 'or', orRanges, includeNull }

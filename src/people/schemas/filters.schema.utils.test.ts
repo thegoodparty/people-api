@@ -119,7 +119,7 @@ describe('transformFilters', () => {
       ])
     })
 
-    it('handles _or with null values (treats as undefined)', () => {
+    it('handles _or with null values (filters them out like regular ranges)', () => {
       const filters = {
         estimatedIncomeAmountInt: {
           _or: [{ gte: null, lte: 24999 }],
@@ -129,7 +129,7 @@ describe('transformFilters', () => {
       const result = transformFilters(filters, mockSchemaShape)
 
       expect(result.filterOperators.estimatedIncomeAmountInt.orRanges).toEqual([
-        { gte: null, lte: 24999 },
+        { gte: undefined, lte: 24999 },
       ])
     })
 
