@@ -55,8 +55,6 @@ const genderExpectedValues = ['M', 'F', 'Unknown'] as const
 
 const languageExpectedValues = ['English', 'Spanish', 'Other'] as const
 
-const estimatedIncomeAmountExpectedValues: string[] = []
-
 const estimatedIncomeAmountIntExpectedValues: number[] = []
 
 const ageIntExpectedValues: number[] = []
