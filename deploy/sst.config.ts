@@ -97,8 +97,10 @@ export default $config({
         'arn:aws:secretsmanager:us-west-2:333022194791:secret:PEOPLE_API_DEV-3oNjn3'
     }
 
-    const secrets: object[] = []
     let secretsJson: Record<string, string> = {}
+    // Build ECS secrets references (ARN-based, not plaintext)
+    const ecsSecrets: { name: string; valueFrom: string }[] = []
+
     if (secretArn) {
       const secretVersion = aws.secretsmanager.getSecretVersion({
         secretId: secretArn,
@@ -122,7 +124,12 @@ export default $config({
           if (key === 'VPC_CIDR') {
             vpcCidr = value as string
           }
-          secrets.push({ key: value })
+          // Build ARN reference for ECS secrets block (not plaintext)
+          // Format: arn:aws:secretsmanager:region:account:secret:name:json-key::
+          ecsSecrets.push({
+            name: key,
+            valueFrom: `${secretArn}:${key}::`,
+          })
         }
       } catch (e) {
         throw new Error(
@@ -243,7 +250,6 @@ export default $config({
         CORS_ORIGIN: webAppRootUrl,
         AWS_REGION: 'us-west-2',
         WEBAPP_ROOT_URL: webAppRootUrl,
-        ...secretsJson,
         // Allow localhost during development for manual testing only
         S2S_ALLOW_LOCALHOST: isDevelop ? 'true' : 'false',
       },
@@ -274,6 +280,15 @@ export default $config({
           serviceArgs.networkConfiguration = {
             ...serviceArgs.networkConfiguration,
             assignPublicIp: true,
+          }
+        },
+        taskDefinition: (taskDefArgs) => {
+          // Inject secrets via ARN references instead of plaintext env vars
+          // ECS will fetch secret values at container startup
+          if (taskDefArgs.containerDefinitions) {
+            const containerDefs = JSON.parse(taskDefArgs.containerDefinitions as string)
+            containerDefs[0].secrets = ecsSecrets
+            taskDefArgs.containerDefinitions = JSON.stringify(containerDefs)
           }
         },
       },
