@@ -18,19 +18,6 @@ export const createEnumFilterSchema = <T extends readonly string[]>(
     }, 'Exactly one operator (in, eq, or is) must be specified')
 }
 
-export const createStringFilterSchema = () => {
-  return z
-    .object({
-      in: z.array(z.string()).min(1).optional(),
-      eq: z.string().optional(),
-      is: z.enum(['not_null', 'null']).optional(),
-    })
-    .refine((data) => {
-      const operatorCount = [data.in, data.eq, data.is].filter(Boolean).length
-      return operatorCount === 1
-    }, 'Exactly one operator (in, eq, or is) must be specified')
-}
-
 const rangeConditionSchema = z.object({
   gte: z.coerce.number().optional(),
   lte: z.coerce.number().optional(),

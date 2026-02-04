@@ -9,9 +9,10 @@
  *   "maritalStatus": { "is": "not_null" },        // Enum filter with 'is' operator
  *   "gender": { "in": ["M", "F"] },               // Enum filter with multiple values
  *   "language": { "in": ["English", "Spanish"] }, // Enum filter with 'in' operator
- *   "estimatedIncomeAmount": { "is": "null" },    // String filter with 'is' operator
  *   "estimatedIncomeAmountInt": { "gte": 25000, "lte": 50000 }, // Numeric filter with range
  *   "estimatedIncomeAmountInt": { "in": [25000, 50000, 75000] }, // Numeric filter with 'in' operator
+ *   "estimatedIncomeAmountInt": { "_or": [{ "gte": 0, "lte": 25000 }, { "gte": 75000, "lte": 100000 }] }, // Numeric filter with OR'd ranges
+ *   "estimatedIncomeAmountInt": { "gte": 25000, "_includeNull": true }, // Numeric filter including null values
  *   "ageInt": { "gte": 18, "lte": 65 },            // Numeric filter with range
  *   "ageInt": { "in": [25, 30, 35] },             // Numeric filter with 'in' operator
  *   "ageInt": { "eq": 30 }                         // Numeric filter with 'eq' operator
@@ -24,17 +25,15 @@
  *   Operators: { in: string[] }, { eq: string }, { is: "not_null" | "null" }
  * - Enum filters: language (uses enum values from FILTER_VALUE_ENUMS.language)
  *   Operators: { in: string[] }, { eq: string }, { is: "not_null" | "null" }
- * - String filters: estimatedIncomeAmount
- *   Operators: { in: string[] }, { eq: string }, { is: "not_null" | "null" }
  * - Numeric filters: ageInt, estimatedIncomeAmountInt
  *   Operators: { in: number[] }, { eq: number }, { gte: number }, { lte: number }, { is: "not_null" | "null" }
+ *   Options: { _or: [{ gte, lte }] } for OR'd ranges, { _includeNull: boolean } to include null values in results
  */
 
 import { z } from 'zod'
 import {
   createEnumFilterSchema,
   createNumericFilterSchema,
-  createStringFilterSchema,
   transformFilters,
   type TransformFiltersResult,
 } from './filters.schema.utils'
@@ -114,7 +113,6 @@ const filtersSchemaObject = z.object({
     FILTER_VALUE_ENUMS.politicalParty,
   ).optional(),
   language: createEnumFilterSchema(FILTER_VALUE_ENUMS.language).optional(),
-  estimatedIncomeAmount: createStringFilterSchema().optional(),
   estimatedIncomeAmountInt: createNumericFilterSchema().optional(),
   ageInt: createNumericFilterSchema().optional(),
 })

@@ -67,9 +67,6 @@ export const buildVoterFiltersSql = (
       case 'language':
         sql = buildLanguageFilter(op)
         break
-      case 'estimatedIncomeAmount':
-        sql = buildFieldFilter('Estimated_Income_Amount', op)
-        break
       case 'estimatedIncomeAmountInt':
         sql = buildNumericFilter('Estimated_Income_Amount_Int', op)
         break
