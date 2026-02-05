@@ -67,9 +67,6 @@ export const buildVoterFiltersSql = (
       case 'language':
         sql = buildLanguageFilter(op)
         break
-      case 'estimatedIncomeAmount':
-        sql = buildFieldFilter('Estimated_Income_Amount', op)
-        break
       case 'estimatedIncomeAmountInt':
         sql = buildNumericFilter('Estimated_Income_Amount_Int', op)
         break
@@ -275,21 +272,21 @@ const buildLanguageFilter = (
 
   if (hasEnglish && hasSpanish && hasOther) {
     return null
-  } else if (hasEnglish && hasSpanish) {
-    return Prisma.sql`v."Language_Code" = ANY(ARRAY['English', 'Spanish']::text[])`
-  } else if (hasEnglish && hasOther) {
-    return Prisma.sql`v."Language_Code" != 'Spanish'`
-  } else if (hasSpanish && hasOther) {
-    return Prisma.sql`v."Language_Code" != 'English'`
-  } else if (hasEnglish) {
-    return Prisma.sql`v."Language_Code" = 'English'`
-  } else if (hasSpanish) {
-    return Prisma.sql`v."Language_Code" = 'Spanish'`
-  } else if (hasOther) {
-    return Prisma.sql`v."Language_Code" != ALL(ARRAY['English', 'Spanish']::text[])`
+  }
+  const conditions: Prisma.Sql[] = []
+  if (hasEnglish) {
+    conditions.push(Prisma.sql`v."Language_Code" = 'English'`)
+  }
+  if (hasSpanish) {
+    conditions.push(Prisma.sql`v."Language_Code" = 'Spanish'`)
+  }
+  if (hasOther) {
+    conditions.push(
+      Prisma.sql`(v."Language_Code" != ALL(ARRAY['English', 'Spanish']::text[]) OR v."Language_Code" IS NULL)`,
+    )
   }
 
-  return null
+  return Prisma.sql`(${Prisma.join(conditions, ' OR ')})`
 }
 
 const buildBooleanFilter = (
@@ -350,6 +347,27 @@ const buildNumericFilter = (
     baseSql = Prisma.sql`v."${Prisma.raw(fieldName)}" >= ${Number(op.value)}`
   } else if (op.operator === 'lte' && op.value !== undefined) {
     baseSql = Prisma.sql`v."${Prisma.raw(fieldName)}" <= ${Number(op.value)}`
+  } else if (op.operator === 'or' && op.orRanges) {
+    const orClauses = op.orRanges
+      .map((range) => {
+        const hasGte = range.gte !== undefined && range.gte !== null
+        const hasLte = range.lte !== undefined && range.lte !== null
+        if (hasGte && hasLte) {
+          return Prisma.sql`(v."${Prisma.raw(fieldName)}" >= ${Number(range.gte)} AND v."${Prisma.raw(fieldName)}" <= ${Number(range.lte)})`
+        } else if (hasGte) {
+          return Prisma.sql`v."${Prisma.raw(fieldName)}" >= ${Number(range.gte)}`
+        } else if (hasLte) {
+          return Prisma.sql`v."${Prisma.raw(fieldName)}" <= ${Number(range.lte)}`
+        }
+        return null
+      })
+      .filter((clause): clause is Prisma.Sql => clause !== null)
+
+    if (orClauses.length > 0) {
+      baseSql = Prisma.sql`(${Prisma.join(orClauses, ' OR ')})`
+    } else if (op.includeNull) {
+      return Prisma.sql`v."${Prisma.raw(fieldName)}" IS NULL`
+    }
   } else if (op.operator === 'is' && op.value === 'not_null') {
     return Prisma.sql`v."${Prisma.raw(fieldName)}" IS NOT NULL`
   } else if (op.operator === 'is' && op.value === 'null') {
