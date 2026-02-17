@@ -99,7 +99,7 @@ export default $config({
 
     let secretsJson: Record<string, string> = {}
     // Build ECS secrets references (ARN-based, not plaintext)
-    const ecsSecrets: { name: string; valueFrom: string }[] = []
+    const secretArns: Record<string, string> = {}
 
     if (secretArn) {
       const secretVersion = aws.secretsmanager.getSecretVersion({
@@ -124,12 +124,7 @@ export default $config({
           if (key === 'VPC_CIDR') {
             vpcCidr = value as string
           }
-          // Build ARN reference for ECS secrets block (not plaintext)
-          // Format: arn:aws:secretsmanager:region:account:secret:name:json-key::
-          ecsSecrets.push({
-            name: key,
-            valueFrom: `${secretArn}:${key}::`,
-          })
+          secretArns[key] = `${secretArn}:${key}::`
         }
       } catch (e) {
         throw new Error(
@@ -264,6 +259,7 @@ export default $config({
           STAGE: $app.stage,
         },
       },
+      ssm: secretArns,
       transform: {
         loadBalancer: {
           idleTimeout: 120,
@@ -280,15 +276,6 @@ export default $config({
           serviceArgs.networkConfiguration = {
             ...serviceArgs.networkConfiguration,
             assignPublicIp: true,
-          }
-        },
-        taskDefinition: (taskDefArgs) => {
-          // Inject secrets via ARN references instead of plaintext env vars
-          // ECS will fetch secret values at container startup
-          if (taskDefArgs.containerDefinitions) {
-            const containerDefs = JSON.parse(taskDefArgs.containerDefinitions as string)
-            containerDefs[0].secrets = ecsSecrets
-            taskDefArgs.containerDefinitions = JSON.stringify(containerDefs)
           }
         },
       },
