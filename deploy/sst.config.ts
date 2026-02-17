@@ -97,8 +97,10 @@ export default $config({
         'arn:aws:secretsmanager:us-west-2:333022194791:secret:PEOPLE_API_DEV-3oNjn3'
     }
 
-    const secrets: object[] = []
     let secretsJson: Record<string, string> = {}
+    // Build ECS secrets references (ARN-based, not plaintext)
+    const secretArns: Record<string, string> = {}
+
     if (secretArn) {
       const secretVersion = aws.secretsmanager.getSecretVersion({
         secretId: secretArn,
@@ -122,7 +124,7 @@ export default $config({
           if (key === 'VPC_CIDR') {
             vpcCidr = value as string
           }
-          secrets.push({ key: value })
+          secretArns[key] = `${secretArn}:${key}::`
         }
       } catch (e) {
         throw new Error(
@@ -243,7 +245,6 @@ export default $config({
         CORS_ORIGIN: webAppRootUrl,
         AWS_REGION: 'us-west-2',
         WEBAPP_ROOT_URL: webAppRootUrl,
-        ...secretsJson,
         // Allow localhost during development for manual testing only
         S2S_ALLOW_LOCALHOST: isDevelop ? 'true' : 'false',
       },
@@ -258,6 +259,7 @@ export default $config({
           STAGE: $app.stage,
         },
       },
+      ssm: secretArns,
       transform: {
         loadBalancer: {
           idleTimeout: 120,
