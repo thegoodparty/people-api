@@ -21,37 +21,40 @@ export async function resolveDistrict(
   params: ResolveDistrictParams,
 ): Promise<ResolvedDistrict> {
   const { state, districtId, districtType, districtName } = params
-  if (districtId && !districtType && !districtName) {
-    const district = await districtService.findDistrictById(districtId)
-    const useVoterOnlyPath =
-      district.type === STATE_DISTRICT_TYPE && district.name === district.state
-    return {
-      districtId: district.id,
-      state: district.state,
-      useVoterOnlyPath,
-      districtType: district.type,
-      districtName: district.name,
+  const byDistrictId = !!districtId && !districtType && !districtName
+  const byTypeName = !!state && !!districtType && !!districtName
+
+  let resolved: ResolvedDistrict
+  if (byDistrictId) {
+    const district = await districtService.findDistrictById(districtId!)
+    const { id, type, name, state: districtState } = district
+    resolved = {
+      districtId: id,
+      state: districtState,
+      useVoterOnlyPath: type === STATE_DISTRICT_TYPE && name === districtState,
+      districtType: type,
+      districtName: name,
     }
-  }
-  if (state && districtType && districtName) {
+  } else if (byTypeName) {
     const resolvedId = await districtService.findDistrictId({
-      state,
-      type: districtType,
-      name: districtName,
+      state: state!,
+      type: districtType!,
+      name: districtName!,
     })
-    const useVoterOnlyPath =
-      districtType === STATE_DISTRICT_TYPE && districtName === state
-    return {
+    resolved = {
       districtId: resolvedId,
-      state,
-      useVoterOnlyPath,
+      state: state!,
+      useVoterOnlyPath:
+        districtType === STATE_DISTRICT_TYPE && districtName === state,
       districtType,
       districtName,
     }
+  } else {
+    resolved = {
+      districtId: null,
+      state: state ?? '',
+      useVoterOnlyPath: true,
+    }
   }
-  return {
-    districtId: null,
-    state: state ?? '',
-    useVoterOnlyPath: true,
-  }
+  return resolved
 }

@@ -59,23 +59,24 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
 
   async findPerson(id: string, query: GetPersonQueryDTO) {
     const resolved = await resolveDistrict(this.districtService, query)
+    const { districtId, state, useVoterOnlyPath } = resolved
     const select = buildVoterSelectSql().sql
     const districtExistsClause =
-      resolved.districtId && !resolved.useVoterOnlyPath
+      districtId && !useVoterOnlyPath
         ? Prisma.sql`AND EXISTS (
             SELECT 1
             FROM green."DistrictVoter" dv
             JOIN green."District" d ON d."id" = dv."district_id"
             WHERE dv."voter_id" = v."id"
-              AND d."id" = ${resolved.districtId}::uuid
+              AND d."id" = ${districtId}::uuid
           )`
         : Prisma.empty
 
     const result = await this.client.$queryRaw<BaseDbPerson[]>(
-      Prisma.sql`${select} FROM "green"."Voter" v WHERE v."id" = ${id}::uuid AND v."State" = CAST(${resolved.state}::text AS "public"."USState") ${districtExistsClause}`,
+      Prisma.sql`${select} FROM "green"."Voter" v WHERE v."id" = ${id}::uuid AND v."State" = CAST(${state}::text AS "public"."USState") ${districtExistsClause}`,
     )
     if (!result.length) {
-      if (resolved.districtId && !resolved.useVoterOnlyPath) {
+      if (districtId && !useVoterOnlyPath) {
         throw new NotFoundException('Person not found in district')
       }
       throw new NotFoundException(`Person with ID ${id} not found`)
@@ -85,38 +86,38 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
 
   async findPeople(dto: ListPeopleDTO) {
     const resolved = await resolveDistrict(this.districtService, dto)
-    const effectiveDistrictId = resolved.useVoterOnlyPath
-      ? null
-      : resolved.districtId
+    const { state, useVoterOnlyPath, districtId } = resolved
+    const { filters, search, resultsPerPage, page } = dto
+    const effectiveDistrictId = useVoterOnlyPath ? null : districtId
 
     const [totalResults, people] = await Promise.all([
       this.rawCountForDistrict({
-        state: resolved.state,
+        state,
         districtId: effectiveDistrictId,
-        filters: dto.filters,
-        search: dto.search,
+        filters,
+        search,
       }),
       this.client.$queryRaw<Array<BaseDbPerson>>(
         this.buildRawPeopleQuery({
           districtId: effectiveDistrictId,
           whereClause: this.rawBuildWhere({
-            state: resolved.state,
+            state,
             districtId: effectiveDistrictId,
-            filters: dto.filters,
-            search: dto.search,
+            filters,
+            search,
           }),
-          take: dto.resultsPerPage,
-          skip: (dto.page - 1) * dto.resultsPerPage,
+          take: resultsPerPage,
+          skip: (page - 1) * resultsPerPage,
         }),
       ),
     ])
-    const totalPages = Math.max(1, Math.ceil(totalResults / dto.resultsPerPage))
-    const currentPage = Math.min(Math.max(1, dto.page), totalPages)
+    const totalPages = Math.max(1, Math.ceil(totalResults / resultsPerPage))
+    const currentPage = Math.min(Math.max(1, page), totalPages)
     return {
       pagination: {
         totalResults,
         currentPage,
-        pageSize: dto.resultsPerPage,
+        pageSize: resultsPerPage,
         totalPages,
         hasNextPage: currentPage < totalPages,
         hasPreviousPage: currentPage > 1,
@@ -127,13 +128,14 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
 
   async streamPeopleCsv(dto: DownloadPeopleDTO, res: FastifyReply) {
     const resolved = await resolveDistrict(this.districtService, dto)
-    const effectiveDistrictId = resolved.useVoterOnlyPath
-      ? null
-      : resolved.districtId
+    const { state, useVoterOnlyPath, districtId, districtType, districtName } =
+      resolved
+    const { filters } = dto
+    const effectiveDistrictId = useVoterOnlyPath ? null : districtId
     const whereClause = this.rawBuildWhere({
       districtId: effectiveDistrictId,
-      state: resolved.state,
-      filters: dto.filters,
+      state,
+      filters,
     })
 
     const extraFields: ExtraSelectedField[] = [
@@ -206,8 +208,8 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
           for (const key of columnNames) {
             row[key] = person[key as keyof typeof person] as CsvValue
           }
-          row.electionLocation = resolved.districtType ?? ''
-          row.electionType = resolved.districtName ?? ''
+          row.electionLocation = districtType ?? ''
+          row.electionType = districtName ?? ''
 
           const canContinue = csvStream.write(row)
           if (!canContinue) {

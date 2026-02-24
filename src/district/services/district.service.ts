@@ -19,11 +19,12 @@ export class DistrictService extends createPrismaBase(MODELS.District) {
     if (!district) {
       throw new NotFoundException(`District not found for id=${id}`)
     }
+    const { id: districtId, type, name, state } = district
     return {
-      id: district.id,
-      type: district.type,
-      name: district.name,
-      state: district.state,
+      id: districtId,
+      type,
+      name,
+      state,
     }
   }
 

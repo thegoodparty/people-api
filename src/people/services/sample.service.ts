@@ -79,25 +79,21 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     dto: z.output<typeof samplePeopleSchema>,
   ): Promise<BaseDbPerson[]> {
     const resolved = await resolveDistrict(this.districtService, dto)
+    const { state, districtId: resolvedDistrictId, useVoterOnlyPath } = resolved
     const size = dto.size ?? 500
     const hasCellPhone = dto.hasCellPhone ?? true
     const excludeIds = dto.excludeIds ?? []
 
-    const seed = hash32(
-      `${resolved.districtId ?? resolved.state}:${Date.now() / 60_000}`,
-    )
+    const seed = hash32(`${resolvedDistrictId ?? state}:${Date.now() / 60_000}`)
 
-    const outerWhereClause = this.buildOuterWhereSql(
-      resolved.state,
-      hasCellPhone,
-    )
+    const outerWhereClause = this.buildOuterWhereSql(state, hasCellPhone)
     const { sql: voterSelect } = buildVoterSelectSql()
 
-    if (resolved.useVoterOnlyPath) {
+    if (useVoterOnlyPath) {
       const stateDistrictId = await this.districtService.findDistrictId({
-        state: resolved.state,
+        state,
         type: STATE_DISTRICT_TYPE,
-        name: resolved.state,
+        name: state,
       })
       const { hashDivisor, prelimit } =
         await this.computeHashDivisorAndPrelimit(
@@ -109,7 +105,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       const { excludeCte, excludeJoin, excludeWhere } =
         this.buildAntiJoinStateOnly(excludeIds)
       const result = await this.runSampleQueryStateOnly({
-        state: resolved.state,
+        state,
         hasCellPhone,
         seed,
         hashDivisor,
@@ -124,7 +120,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       if (result.length < size) {
         const retrySeed = (seed + 1) >>> 0
         return this.runSampleQueryStateOnly({
-          state: resolved.state,
+          state,
           hasCellPhone,
           seed: retrySeed,
           hashDivisor,
@@ -140,8 +136,8 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       return result
     }
 
-    const districtId = resolved.districtId!
-    const innerWhereClause = this.buildInnerWhereSql(districtId, resolved.state)
+    const districtId = resolvedDistrictId!
+    const innerWhereClause = this.buildInnerWhereSql(districtId, state)
     const { hashDivisor, prelimit } = await this.computeHashDivisorAndPrelimit(
       districtId,
       excludeIds.length,
