@@ -2,8 +2,31 @@ import { Injectable, NotFoundException } from '@nestjs/common'
 import { $Enums } from '@prisma/client'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
 
+export interface DistrictById {
+  id: string
+  type: string
+  name: string
+  state: string
+}
+
 @Injectable()
 export class DistrictService extends createPrismaBase(MODELS.District) {
+  async findDistrictById(id: string): Promise<DistrictById> {
+    const district = await this.model.findUnique({
+      where: { id },
+      select: { id: true, type: true, name: true, state: true },
+    })
+    if (!district) {
+      throw new NotFoundException(`District not found for id=${id}`)
+    }
+    return {
+      id: district.id,
+      type: district.type,
+      name: district.name,
+      state: district.state,
+    }
+  }
+
   async findDistrictId(typeNameState: {
     state: string
     type: string
