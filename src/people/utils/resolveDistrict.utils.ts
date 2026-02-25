@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common'
 import { DistrictService } from 'src/district/services/district.service'
 import { STATE_DISTRICT_TYPE } from '../people.schema'
 
@@ -50,9 +51,15 @@ export async function resolveDistrict(
       districtName,
     }
   } else {
+    const stateOnlyState = state ?? ''
+    if (!stateOnlyState) {
+      throw new BadRequestException(
+        'state is required when district is not specified by districtId or by state+districtType+districtName',
+      )
+    }
     resolved = {
       districtId: null,
-      state: state ?? '',
+      state: stateOnlyState,
       useVoterOnlyPath: true,
     }
   }

@@ -32,7 +32,9 @@ const districtStateNameRefine = (v: {
   state?: string
 }) =>
   v.districtType !== STATE_DISTRICT_TYPE ||
-  (v.districtName != null && v.state != null && v.districtName === v.state)
+  (v.districtName != null &&
+    v.state != null &&
+    v.districtName.toUpperCase() === v.state.toUpperCase())
 
 const districtStateNameMessage =
   'When districtType is State, districtName must equal state'
