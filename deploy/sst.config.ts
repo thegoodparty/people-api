@@ -242,6 +242,8 @@ export default $config({
         PORT: '80',
         HOST: '0.0.0.0',
         LOG_LEVEL: 'debug',
+        OTEL_SERVICE_ENVIRONMENT: isProd ? 'prod' : 'dev',
+        SECRET_NAMES: Object.keys(secretsJson).join(','),
         CORS_ORIGIN: webAppRootUrl,
         AWS_REGION: 'us-west-2',
         WEBAPP_ROOT_URL: webAppRootUrl,

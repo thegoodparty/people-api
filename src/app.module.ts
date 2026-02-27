@@ -4,13 +4,12 @@ import { HealthModule } from './health/health.module'
 import { AuthModule } from './auth/auth.module'
 import { PrismaModule } from './prisma/prisma.module'
 import { PeopleModule } from './people/people.module'
-import { loggingConfig } from './logging/logging.config'
-import { LoggerModule } from 'nestjs-pino'
+import { loggerModule } from './observability/logging/logger-module'
 import { NewRelicInterceptor } from './monitoring/newrelic.interceptor'
 
 @Module({
   imports: [
-    LoggerModule.forRoot(loggingConfig),
+    loggerModule,
     PrismaModule,
     HealthModule,
     PeopleModule,
