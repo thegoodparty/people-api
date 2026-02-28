@@ -5,14 +5,9 @@ api/dist
 # Node.js runtime environment
 node_modules
 nestjs/node_modules
-sst/node_modules
 
-# SST specific
-.sst
-sst-env.d.ts
-deploy/sst-env.d.ts
-deploy/.sst
-.build
+# Pulumi stack config (contains env-specific values)
+deploy/Pulumi.*.yaml
 
 # Logs
 logs
@@ -45,7 +40,6 @@ lerna-debug.log*
 # dotenv environment variable files
 .env
 .env.perf-local
-sst/.env
 /nestjs/.env
 /nestjs/.env.development.local
 /nestjs/.env.test.local
