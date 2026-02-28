@@ -1,12 +1,13 @@
 import { BadRequestException, Injectable } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
-import { samplePeopleSchema } from '../people.schema'
+import { samplePeopleSchema, STATE_DISTRICT_TYPE } from '../people.schema'
 import { BaseDbPerson, buildVoterSelectSql } from '../people.select'
 import { DistrictService } from 'src/district/services/district.service'
 import { z } from 'zod'
 import { StatsService } from './stats.service'
 import { hash32 } from 'src/shared/util/hash.util'
+import { resolveDistrict } from '../utils/resolveDistrict.utils'
 
 // The comments in this class are not LLM generated, do not remove
 // They are human-written
@@ -77,37 +78,72 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
   async samplePeople(
     dto: z.output<typeof samplePeopleSchema>,
   ): Promise<BaseDbPerson[]> {
-    const {
-      state,
-      districtType = '',
-      districtName = '',
-      size = 500,
-      hasCellPhone = true,
-      excludeIds = [],
-    } = dto
+    const resolved = await resolveDistrict(this.districtService, dto)
+    const { state, districtId: resolvedDistrictId, useVoterOnlyPath } = resolved
+    const size = dto.size ?? 500
+    const hasCellPhone = dto.hasCellPhone ?? true
+    const excludeIds = dto.excludeIds ?? []
 
-    let districtId = ''
-    if (districtType && districtName) {
-      districtId = await this.districtService.findDistrictId({
+    const seed = hash32(`${resolvedDistrictId ?? state}:${Date.now() / 60_000}`)
+
+    const outerWhereClause = this.buildOuterWhereSql(state, hasCellPhone)
+    const { sql: voterSelect } = buildVoterSelectSql()
+
+    if (useVoterOnlyPath) {
+      const stateDistrictId = await this.districtService.findDistrictId({
         state,
-        type: districtType,
-        name: districtName,
+        type: STATE_DISTRICT_TYPE,
+        name: state,
       })
+      const { hashDivisor, prelimit } =
+        await this.computeHashDivisorAndPrelimit(
+          stateDistrictId,
+          excludeIds.length,
+          size,
+          hasCellPhone,
+        )
+      const { excludeCte, excludeJoin, excludeWhere } =
+        this.buildAntiJoinStateOnly(excludeIds)
+      const result = await this.runSampleQueryStateOnly({
+        state,
+        hasCellPhone,
+        seed,
+        hashDivisor,
+        outerWhereClause,
+        excludeCte,
+        excludeJoin,
+        excludeWhere,
+        prelimit,
+        voterSelect,
+        size,
+      })
+      if (result.length < size) {
+        const retrySeed = (seed + 1) >>> 0
+        return this.runSampleQueryStateOnly({
+          state,
+          hasCellPhone,
+          seed: retrySeed,
+          hashDivisor,
+          outerWhereClause,
+          excludeCte,
+          excludeJoin,
+          excludeWhere,
+          prelimit,
+          voterSelect,
+          size,
+        })
+      }
+      return result
     }
 
-    const seed = hash32(`${districtId}:${Date.now() / 60_000}`) // Rotates every minute
-
+    const districtId = resolvedDistrictId!
     const innerWhereClause = this.buildInnerWhereSql(districtId, state)
-    const outerWhereClause = this.buildOuterWhereSql(state, hasCellPhone)
     const { hashDivisor, prelimit } = await this.computeHashDivisorAndPrelimit(
       districtId,
       excludeIds.length,
       size,
       hasCellPhone,
     )
-
-    const { sql: voterSelect } = buildVoterSelectSql()
-
     const { excludeCte, excludeJoin, excludeWhere } =
       this.buildAntiJoin(excludeIds)
     const result = await this.runSampleQuery({
@@ -142,6 +178,81 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       return retryResult
     }
     return result
+  }
+
+  private buildStateOnlyInnerWhere(
+    state: string,
+    hasCellPhone?: boolean,
+  ): Prisma.Sql {
+    const parts: Prisma.Sql[] = [
+      Prisma.sql`v."State" = CAST(${state}::text AS public."USState")`,
+    ]
+    if (hasCellPhone === true) {
+      parts.push(Prisma.sql`v."VoterTelephones_CellPhoneFormatted" IS NOT NULL`)
+    } else if (hasCellPhone === false) {
+      parts.push(Prisma.sql`v."VoterTelephones_CellPhoneFormatted" IS NULL`)
+    }
+    return Prisma.sql`WHERE ${Prisma.join(parts, ' AND ')}`
+  }
+
+  private async runSampleQueryStateOnly(args: {
+    state: string
+    hasCellPhone: boolean | undefined
+    seed: number
+    hashDivisor: number
+    outerWhereClause: Prisma.Sql
+    excludeCte: Prisma.Sql
+    excludeJoin: Prisma.Sql
+    excludeWhere: Prisma.Sql
+    prelimit: number
+    voterSelect: Prisma.Sql
+    size: number
+  }): Promise<BaseDbPerson[]> {
+    const {
+      state,
+      hasCellPhone,
+      seed,
+      hashDivisor,
+      outerWhereClause,
+      excludeCte,
+      excludeJoin,
+      excludeWhere,
+      prelimit,
+      voterSelect,
+      size,
+    } = args
+    const hashBuckets = this.makeHashBuckets(hashDivisor, seed)
+    const innerWhere = this.buildStateOnlyInnerWhere(state, hasCellPhone)
+    const rows = (await this.client.$transaction(
+      async (tx) => {
+        await tx.$executeRawUnsafe(`
+        SET LOCAL plan_cache_mode = force_custom_plan;
+      `)
+        return tx.$queryRaw`
+      WITH ${excludeCte} candidate_ids AS (
+        SELECT v.id
+        FROM green."Voter" v
+          ${excludeJoin}
+          ${innerWhere}
+          AND (
+            abs(hashtextextended(v.id::text, ${seed})) % ${hashDivisor}
+          ) = ANY(${hashBuckets}::int[])
+          ${excludeWhere}
+        LIMIT ${prelimit}
+      )
+      ${voterSelect}
+      FROM candidate_ids c
+      JOIN green."Voter" v
+        ON v.id = c.id
+      ${outerWhereClause}
+      LIMIT ${size};
+      `
+      },
+      {
+        timeout: 60_000,
+      },
+    )) as BaseDbPerson[]
+    return rows
   }
 
   private async runSampleQuery(args: {
@@ -253,6 +364,26 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     return {
       excludeCte: Prisma.sql`exclude AS (SELECT unnest(${excludeArray}) AS id),`,
       excludeJoin: Prisma.sql`LEFT JOIN exclude e ON e.id = dv.voter_id`,
+      excludeWhere: Prisma.sql`AND e.id IS NULL`,
+    }
+  }
+
+  private buildAntiJoinStateOnly(excludeIds: string[]): {
+    excludeCte: Prisma.Sql
+    excludeJoin: Prisma.Sql
+    excludeWhere: Prisma.Sql
+  } {
+    if (excludeIds.length === 0) {
+      return {
+        excludeCte: Prisma.empty,
+        excludeJoin: Prisma.empty,
+        excludeWhere: Prisma.empty,
+      }
+    }
+    const excludeArray = Prisma.sql`ARRAY[${Prisma.join(excludeIds)}]::uuid[]`
+    return {
+      excludeCte: Prisma.sql`exclude AS (SELECT unnest(${excludeArray}) AS id),`,
+      excludeJoin: Prisma.sql`LEFT JOIN exclude e ON e.id = v.id`,
       excludeWhere: Prisma.sql`AND e.id IS NULL`,
     }
   }

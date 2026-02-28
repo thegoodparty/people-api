@@ -10,16 +10,15 @@ export class StatsService extends createPrismaBase(MODELS.DistrictStats) {
     super()
   }
 
-  async getStats({
-    state,
-    districtType,
-    districtName,
-  }: StatsDTO): Promise<DistrictStats> {
-    const districtId = await this.districtService.findDistrictId({
-      state,
-      type: districtType,
-      name: districtName,
-    })
+  async getStats(dto: StatsDTO): Promise<DistrictStats> {
+    const { districtId: dtoDistrictId, state, districtType, districtName } = dto
+    const districtId = dtoDistrictId
+      ? dtoDistrictId
+      : await this.districtService.findDistrictId({
+          state: state!,
+          type: districtType!,
+          name: districtName!,
+        })
     const stats = await this.model.findUnique({ where: { districtId } })
 
     if (!stats) {
