@@ -46,10 +46,28 @@ const statsDistrictRefine = (v: {
   districtName?: string
 }) =>
   (!!v.districtId && !v.districtType && !v.districtName) ||
-  (!!v.state && !!v.districtType && !!v.districtName)
+  (!!v.state && !!v.districtType && !!v.districtName) ||
+  (!!v.state && !v.districtId && !v.districtType && !v.districtName)
 
 const statsDistrictMessage =
-  'Either districtId only, or state + districtType + districtName'
+  'Either districtId only, or state + districtType + districtName, or state only'
+
+const normalizeStateOnlyDistrict = <
+  T extends {
+    state?: string
+    districtId?: string
+    districtType?: string
+    districtName?: string
+  },
+>(
+  v: T,
+): T => {
+  const stateOnly =
+    !!v.state && !v.districtId && !v.districtType && !v.districtName
+  return stateOnly && v.state
+    ? { ...v, districtType: STATE_DISTRICT_TYPE, districtName: v.state }
+    : v
+}
 
 export const listPeopleSchema = z
   .object({
@@ -64,6 +82,7 @@ export const listPeopleSchema = z
   })
   .refine(districtEitherRefine, districtEitherMessage)
   .refine(districtStateNameRefine, districtStateNameMessage)
+  .transform(normalizeStateOnlyDistrict)
 
 export class ListPeopleDTO extends createZodDto(listPeopleSchema) {}
 
@@ -79,6 +98,7 @@ export const downloadPeopleSchema = z
   })
   .refine(districtEitherRefine, districtEitherMessage)
   .refine(districtStateNameRefine, districtStateNameMessage)
+  .transform(normalizeStateOnlyDistrict)
 
 export class DownloadPeopleDTO extends createZodDto(downloadPeopleSchema) {}
 
@@ -91,7 +111,8 @@ export class StatsDTO extends createZodDto(
       districtName: z.string().optional(),
     })
     .refine(statsDistrictRefine, statsDistrictMessage)
-    .refine(districtStateNameRefine, districtStateNameMessage),
+    .refine(districtStateNameRefine, districtStateNameMessage)
+    .transform(normalizeStateOnlyDistrict),
 ) {}
 
 export const samplePeopleSchema = z
@@ -106,6 +127,7 @@ export const samplePeopleSchema = z
   })
   .refine(districtEitherRefine, districtEitherMessage)
   .refine(districtStateNameRefine, districtStateNameMessage)
+  .transform(normalizeStateOnlyDistrict)
 
 export class SamplePeopleDTO extends createZodDto(samplePeopleSchema) {}
 
@@ -124,6 +146,7 @@ export const getPersonQuerySchema = z
   })
   .refine(districtEitherRefine, districtEitherMessage)
   .refine(districtStateNameRefine, districtStateNameMessage)
+  .transform(normalizeStateOnlyDistrict)
 
 export class GetPersonQueryDTO extends createZodDto(getPersonQuerySchema) {}
 
