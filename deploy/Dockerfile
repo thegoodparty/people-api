@@ -34,9 +34,6 @@ ENV PUPPETEER_EXECUTABLE_PATH=/dev/null
 
 WORKDIR /app
 
-# Optionally bust the cache to force a rebuild of the following steps
-ARG CACHEBUST
-
 # Install dependencies
 COPY package.json package-lock.json tsconfig.json tsconfig.build.json ./
 
