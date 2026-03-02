@@ -47,9 +47,18 @@ const bootstrap = async () => {
     }),
     {
       rawBody: true,
+      bufferLogs: true,
     },
   )
   app.useLogger(app.get(Logger))
+
+  if (global.__fastifyOtelInstrumentation) {
+    await app
+      .getHttpAdapter()
+      .getInstance()
+      .register(global.__fastifyOtelInstrumentation.plugin())
+  }
+
   app.setGlobalPrefix('v1')
   app.useGlobalPipes(new ZodValidationPipe())
 

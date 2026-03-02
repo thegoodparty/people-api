@@ -17,7 +17,7 @@ if (!process.env.NEW_RELIC_APP_NAME || !process.env.NEW_RELIC_LICENSE_KEY) {
       enabled: true,
       forwarding: { enabled: false },
       metrics: { enabled: true },
-      local_decorating: { enabled: true },
+      local_decorating: { enabled: false },
     },
     error_collector: {
       enabled: true,
