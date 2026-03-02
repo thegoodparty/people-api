@@ -22,7 +22,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
   private static readonly BUCKET_COUNT = 3
   private static readonly MAX_HASH_DIVISOR = 10000
   private static readonly MIN_HASH_DIVISOR = 1
-  private static readonly MIN_POPULATION_MULTIPLIER = 1.5
+  private static readonly MIN_POPULATION_MULTIPLIER = 0.5
   private static readonly PRELIMIT_MULTIPLIER = 2
   private static readonly MAX_PRELIMIT = 20000
 
