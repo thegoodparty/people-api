@@ -44,59 +44,41 @@ export = async () => {
 
   const { password } = extractDbCredentials(secret.DATABASE_URL)
 
-  const dbSubnetGroup = new aws.rds.SubnetGroup(
-    'dbSubnetGroup',
-    {
-      name: select({
-        dev: 'people-db-subnets-develop-e3e3853',
-        prod: 'people-db-subnets-master-5134a50',
-      }),
-      subnetIds: vpcSubnetIds.private,
-      tags: { Name: `gp-people-db-${stage}` },
-    },
-    {
-      import: select({
-        dev: 'people-db-subnets-develop-e3e3853',
-        prod: 'people-db-subnets-master-5134a50',
-      }),
-    },
-  )
+  const dbSubnetGroup = new aws.rds.SubnetGroup('dbSubnetGroup', {
+    name: select({
+      dev: 'people-db-subnets-develop-e3e3853',
+      prod: 'people-db-subnets-master-5134a50',
+    }),
+    subnetIds: vpcSubnetIds.private,
+    tags: { Name: `gp-people-db-${stage}` },
+  })
 
-  const rdsCluster = new aws.rds.Cluster(
-    'rdsCluster',
-    {
-      clusterIdentifier: select({
-        dev: 'gp-people-db-dev',
-        prod: 'gp-people-db-prod',
+  const rdsCluster = new aws.rds.Cluster('rdsCluster', {
+    clusterIdentifier: select({
+      dev: 'gp-people-db-dev',
+      prod: 'gp-people-db-prod',
+    }),
+    engine: aws.rds.EngineType.AuroraPostgresql,
+    engineMode: aws.rds.EngineMode.Provisioned,
+    engineVersion: '16.8',
+    masterUsername: 'people_admin',
+    databaseName: select({ dev: 'people_dev', prod: 'people_prod' }),
+    masterPassword: pulumi.secret(password),
+    dbSubnetGroupName: dbSubnetGroup.name,
+    vpcSecurityGroupIds: [
+      select({
+        dev: 'sg-0b834a3f7b64950d0',
+        prod: 'sg-03783e4adbbee87dc',
       }),
-      engine: aws.rds.EngineType.AuroraPostgresql,
-      engineMode: aws.rds.EngineMode.Provisioned,
-      engineVersion: '16.8',
-      masterUsername: 'people_admin',
-      databaseName: select({ dev: 'people_dev', prod: 'people_prod' }),
-      masterPassword: pulumi.secret(password),
-      dbSubnetGroupName: dbSubnetGroup.name,
-      vpcSecurityGroupIds: [
-        select({
-          dev: 'sg-0b834a3f7b64950d0',
-          prod: 'sg-03783e4adbbee87dc',
-        }),
-      ],
-      storageEncrypted: true,
-      backupRetentionPeriod: select({ dev: 1, prod: 7 }),
-      preferredBackupWindow: '07:00-09:00',
-      deletionProtection: true,
-      skipFinalSnapshot: environment === 'dev',
-      finalSnapshotIdentifier: `gp-people-db-${stage}-final-snapshot`,
-      performanceInsightsEnabled: true,
-    },
-    {
-      import: select({
-        dev: 'gp-people-db-dev',
-        prod: 'gp-people-db-prod',
-      }),
-    },
-  )
+    ],
+    storageEncrypted: true,
+    backupRetentionPeriod: select({ dev: 1, prod: 7 }),
+    preferredBackupWindow: '07:00-09:00',
+    deletionProtection: true,
+    skipFinalSnapshot: environment === 'dev',
+    finalSnapshotIdentifier: `gp-people-db-${stage}-final-snapshot`,
+    performanceInsightsEnabled: true,
+  })
 
   const rdsInstanceIds = select({
     dev: ['gp-people-db-dev-1'],
@@ -104,24 +86,18 @@ export = async () => {
   })
 
   for (let i = 0; i < rdsInstanceIds.length; i++) {
-    new aws.rds.ClusterInstance(
-      `rdsInstance-${i}`,
-      {
-        identifier: rdsInstanceIds[i],
-        clusterIdentifier: rdsCluster.id,
-        instanceClass: select({
-          dev: 'db.t4g.medium',
-          prod: 'db.r6g.4xlarge',
-        }),
-        engine: aws.rds.EngineType.AuroraPostgresql,
-        engineVersion: rdsCluster.engineVersion,
-        publiclyAccessible: false,
-        dbSubnetGroupName: dbSubnetGroup.name,
-      },
-      {
-        import: rdsInstanceIds[i],
-      },
-    )
+    new aws.rds.ClusterInstance(`rdsInstance-${i}`, {
+      identifier: rdsInstanceIds[i],
+      clusterIdentifier: rdsCluster.id,
+      instanceClass: select({
+        dev: 'db.t4g.medium',
+        prod: 'db.r6g.4xlarge',
+      }),
+      engine: aws.rds.EngineType.AuroraPostgresql,
+      engineVersion: rdsCluster.engineVersion,
+      publiclyAccessible: false,
+      dbSubnetGroupName: dbSubnetGroup.name,
+    })
   }
 
   createService({
