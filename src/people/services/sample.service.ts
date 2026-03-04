@@ -22,6 +22,13 @@ type SampleQueryMode =
       districtId: string
     }
 
+interface SampleQueryFragments {
+  sourceFromClause: Prisma.Sql
+  candidateIdReference: Prisma.Sql
+  excludeIdReference: Prisma.Sql
+  innerWhereClause: Prisma.Sql
+}
+
 // The comments in this class are not LLM generated, do not remove
 // They are human-written
 @Injectable()
@@ -120,21 +127,22 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
           state,
           districtId: resolvedDistrictId!,
         }
+    const { districtId } = mode
 
     const { hashDivisor, prelimit } = await this.computeHashDivisorAndPrelimit(
-      mode.districtId,
+      districtId,
       excludeIds.length,
       size,
       hasCellPhone,
     )
-    const excludeIdReference =
-      mode.kind === 'stateOnly' ? Prisma.sql`v.id` : Prisma.sql`dv.voter_id`
+    const queryFragments = this.buildSampleQueryFragments(mode)
     const { excludeCte, excludeJoin, excludeWhere } = this.buildAntiJoin(
       excludeIds,
-      excludeIdReference,
+      queryFragments.excludeIdReference,
     )
     const result = await this.runSampleQuery({
       mode,
+      queryFragments,
       seed,
       hashDivisor,
       outerWhereClause,
@@ -146,14 +154,16 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       size,
     })
     if (result.length < size) {
+      const { kind, state: modeState, districtId: modeDistrictId } = mode
       this.logger.warn(
-        mode.kind === 'district'
-          ? `Sampling retry activated for district: ${mode.districtId}`
-          : `Sampling retry activated for state: ${mode.state}`,
+        kind === 'district'
+          ? `Sampling retry activated for district: ${modeDistrictId}`
+          : `Sampling retry activated for state: ${modeState}`,
       )
       const retrySeed = (seed + 1) >>> 0
       return this.runSampleQuery({
         mode,
+        queryFragments,
         seed: retrySeed,
         hashDivisor,
         outerWhereClause,
@@ -170,6 +180,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
 
   private async runSampleQuery(args: {
     mode: SampleQueryMode
+    queryFragments: SampleQueryFragments
     seed: number
     hashDivisor: number
     outerWhereClause: Prisma.Sql
@@ -182,6 +193,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
   }): Promise<BaseDbPerson[]> {
     const {
       mode,
+      queryFragments,
       seed,
       hashDivisor,
       outerWhereClause,
@@ -192,34 +204,17 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       voterSelect,
       size,
     } = args
+    const { kind, districtId } = mode
     const hashBuckets = this.makeHashBuckets(hashDivisor, seed)
-    if (mode.kind === 'district') {
+    if (kind === 'district') {
       this.logger.debug(`
       Querying for sample buckets.
-      districtId: ${mode.districtId}
+      districtId: ${districtId}
       hashBuckets: ${hashBuckets.toString()}
       hashDivisor: ${hashDivisor}
       seed: ${seed}
       `)
     }
-    const candidateIdReference =
-      mode.kind === 'stateOnly' ? Prisma.sql`v.id` : Prisma.sql`dv.voter_id`
-    const innerWhereClause =
-      mode.kind === 'stateOnly'
-        ? this.buildInnerWhereSql({
-            state: mode.state,
-            stateOnly: true,
-            hasCellPhone: mode.hasCellPhone,
-          })
-        : this.buildInnerWhereSql({
-            state: mode.state,
-            districtId: mode.districtId,
-            stateOnly: false,
-          })
-    const sourceFromClause =
-      mode.kind === 'stateOnly'
-        ? Prisma.sql`FROM green."Voter" v`
-        : Prisma.sql`FROM green."DistrictVoter" dv`
     const rows = (await this.client.$transaction(
       async (tx) => {
         await tx.$executeRawUnsafe(`
@@ -227,17 +222,17 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       `)
         return tx.$queryRaw`
       WITH ${excludeCte} candidate_ids AS (
-        SELECT ${candidateIdReference} AS id
-        ${sourceFromClause}
+        SELECT ${queryFragments.candidateIdReference} AS id
+        ${queryFragments.sourceFromClause}
           ${excludeJoin}
-          ${innerWhereClause}
+          ${queryFragments.innerWhereClause}
       
           -- PRE CUT - Divides all of the voterIds into buckets
           -- Number of buckets is our hashDivisor
           -- A row only passes this filter if it's bucket is in hashBuckets
           -- Ex: hashDivisor = 2000, bucketCount - 3, we select 3/2000 = ~0.15%
           AND (
-            abs(hashtextextended(${candidateIdReference}::text, ${seed})) % ${hashDivisor}
+            abs(hashtextextended(${queryFragments.candidateIdReference}::text, ${seed})) % ${hashDivisor}
           ) = ANY(${hashBuckets}::int[])
       
           -- cheap hash anti-join (exclude ids)
@@ -258,6 +253,26 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
       },
     )) as BaseDbPerson[]
     return rows
+  }
+
+  private buildSampleQueryFragments(
+    mode: SampleQueryMode,
+  ): SampleQueryFragments {
+    const { kind } = mode
+    if (kind === 'stateOnly') {
+      return {
+        sourceFromClause: Prisma.sql`FROM green."Voter" v`,
+        candidateIdReference: Prisma.sql`v.id`,
+        excludeIdReference: Prisma.sql`v.id`,
+        innerWhereClause: this.buildInnerWhereSql(mode),
+      }
+    }
+    return {
+      sourceFromClause: Prisma.sql`FROM green."DistrictVoter" dv`,
+      candidateIdReference: Prisma.sql`dv.voter_id`,
+      excludeIdReference: Prisma.sql`dv.voter_id`,
+      innerWhereClause: this.buildInnerWhereSql(mode),
+    }
   }
 
   private makeHashBuckets(hashDivisor: number, seed32: number): number[] {
@@ -322,15 +337,11 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     return Prisma.sql`WHERE ${Prisma.join(whereParts, ' AND ')}`
   }
 
-  private buildInnerWhereSql(args: {
-    state: string
-    stateOnly: boolean
-    districtId?: string
-    hasCellPhone?: boolean
-  }): Prisma.Sql {
-    const { state, stateOnly, districtId, hasCellPhone } = args
+  private buildInnerWhereSql(mode: SampleQueryMode): Prisma.Sql {
+    const { kind, state } = mode
     const whereParts: Prisma.Sql[] = []
-    if (stateOnly) {
+    if (kind === 'stateOnly') {
+      const { hasCellPhone } = mode
       whereParts.push(
         Prisma.sql`v."State" = CAST(${state}::text AS public."USState")`,
       )
@@ -343,7 +354,8 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
           Prisma.sql`v."VoterTelephones_CellPhoneFormatted" IS NULL`,
         )
       }
-    } else if (districtId && state) {
+    } else if (mode.districtId && state) {
+      const { districtId } = mode
       whereParts.push(Prisma.sql`dv.district_id = ${districtId}::uuid`)
       whereParts.push(
         Prisma.sql`dv."State" = CAST(${state}::text AS public."USState")`,
