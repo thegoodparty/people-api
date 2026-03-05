@@ -290,7 +290,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
   }): Promise<number> {
     const { state, districtId, search } = args
 
-    if (districtId && !args.search && Object.keys(args.filters).length === 0) {
+    if (districtId && !args.search && args.filters.filters.length === 0) {
       const { totalConstituents } =
         await this.statsService.getTotalCounts(districtId)
       return totalConstituents
