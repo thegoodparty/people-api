@@ -20,7 +20,7 @@ const districtEitherRefine = (v: {
   districtName?: string
 }) =>
   (!!v.districtId && !v.districtType && !v.districtName) ||
-  (!!v.state && !!v.districtType && !!v.districtName) ||
+  (!!v.state && !v.districtId && !!v.districtType && !!v.districtName) ||
   (!!v.state && !v.districtId && !v.districtType && !v.districtName)
 
 const districtEitherMessage =
@@ -38,19 +38,6 @@ const districtStateNameRefine = (v: {
 
 const districtStateNameMessage =
   'When districtType is State, districtName must equal state'
-
-const statsDistrictRefine = (v: {
-  districtId?: string
-  state?: string
-  districtType?: string
-  districtName?: string
-}) =>
-  (!!v.districtId && !v.districtType && !v.districtName) ||
-  (!!v.state && !!v.districtType && !!v.districtName) ||
-  (!!v.state && !v.districtId && !v.districtType && !v.districtName)
-
-const statsDistrictMessage =
-  'Either districtId only, or state + districtType + districtName, or state only'
 
 const normalizeStateOnlyDistrict = <
   T extends {
@@ -110,7 +97,7 @@ export class StatsDTO extends createZodDto(
       districtType: z.string().optional(),
       districtName: z.string().optional(),
     })
-    .refine(statsDistrictRefine, statsDistrictMessage)
+    .refine(districtEitherRefine, districtEitherMessage)
     .refine(districtStateNameRefine, districtStateNameMessage)
     .transform(normalizeStateOnlyDistrict),
 ) {}
