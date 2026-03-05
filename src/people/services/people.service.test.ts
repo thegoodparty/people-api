@@ -279,11 +279,24 @@ describe('PeopleService', () => {
 
       await ended
       const csv = Buffer.concat(chunks).toString('utf-8')
+      const lines = csv
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+      const header = lines[0].split(',')
+      const data = lines[1].split(',')
+      const electionLocationIdx = header.indexOf('electionLocation')
+      const electionTypeIdx = header.indexOf('electionType')
+      const unquote = (v: string) => v.replace(/^"(.*)"$/, '$1')
 
       expect(csv).toContain('electionLocation,electionType')
       expect(csv).toContain('stream-1')
       expect(csv).toContain('City_Ward')
       expect(csv).toContain('CHEYENNE CITY WARD 1')
+      expect(electionLocationIdx).toBeGreaterThan(-1)
+      expect(electionTypeIdx).toBeGreaterThan(-1)
+      expect(unquote(data[electionLocationIdx])).toBe('CHEYENNE CITY WARD 1')
+      expect(unquote(data[electionTypeIdx])).toBe('City_Ward')
     })
   })
 })

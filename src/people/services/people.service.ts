@@ -90,6 +90,10 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     const { filters, search, resultsPerPage, page } = dto
     const effectiveDistrictId = useVoterOnlyPath ? null : districtId
 
+    // TODO: This executes count and data query in parallel
+    // for latency, but the data query uses the requested page offset while
+    // currentPage is clamped from totalResults below. If requested page is out
+    // of bounds, pagination metadata and returned rows can diverge.
     const [totalResults, people] = await Promise.all([
       this.rawCountForDistrict({
         state,
@@ -111,8 +115,10 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
         }),
       ),
     ])
+
     const totalPages = Math.max(1, Math.ceil(totalResults / resultsPerPage))
     const currentPage = Math.min(Math.max(1, page), totalPages)
+
     return {
       pagination: {
         totalResults,
@@ -208,8 +214,8 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
           for (const key of columnNames) {
             row[key] = person[key as keyof typeof person] as CsvValue
           }
-          row.electionLocation = districtType ?? ''
-          row.electionType = districtName ?? ''
+          row.electionLocation = districtName ?? ''
+          row.electionType = districtType ?? ''
 
           const canContinue = csvStream.write(row)
           if (!canContinue) {

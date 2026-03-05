@@ -55,14 +55,13 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
   ) {
     const { totalConstituentsWithCellPhone, totalConstituents } =
       await this.statsService.getTotalCounts(districtId)
-    const effectiveExcludeCount = Math.min(
-      excludeIdsSize,
-      totalConstituentsWithCellPhone,
-    )
+    const poolConstituentCount = hasCellPhone
+      ? totalConstituentsWithCellPhone
+      : totalConstituents
+    const effectiveExcludeCount = Math.min(excludeIdsSize, poolConstituentCount)
 
-    const remainingConstituentCount = hasCellPhone
-      ? totalConstituentsWithCellPhone - effectiveExcludeCount
-      : totalConstituents - effectiveExcludeCount
+    const remainingConstituentCount =
+      poolConstituentCount - effectiveExcludeCount
 
     if (remainingConstituentCount < targetSampleSize) {
       throw new BadRequestException(

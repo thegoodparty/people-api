@@ -116,6 +116,23 @@ describe('SampleService', () => {
     ).rejects.toThrow(BadRequestException)
   })
 
+  it('applies excludeIds against total constituency pool when hasCellPhone=false', async () => {
+    mockStatsService.getTotalCounts.mockResolvedValue({
+      totalConstituents: 100,
+      totalConstituentsWithCellPhone: 10,
+    })
+    wireTransactionResults([[]])
+
+    await expect(
+      service.samplePeople({
+        districtId: '0e5bafca-93a9-86a5-2522-f373979720df',
+        size: 60,
+        hasCellPhone: false,
+        excludeIds: Array.from({ length: 50 }, (_, i) => `exclude-${i}`),
+      }),
+    ).rejects.toThrow(BadRequestException)
+  })
+
   it('retries with a new seed when first sample is underfilled', async () => {
     wireTransactionResults([
       [{ id: 'person-a', State: 'WY' }],
