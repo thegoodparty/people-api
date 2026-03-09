@@ -39,82 +39,46 @@ const districtStateNameRefine = (v: {
 const districtStateNameMessage =
   'When districtType is State, districtName must equal state'
 
-const normalizeStateOnlyDistrict = <
-  T extends {
-    state?: string
-    districtId?: string
-    districtType?: string
-    districtName?: string
-  },
->(
-  v: T,
-): T => {
-  const stateOnly =
-    !!v.state && !v.districtId && !v.districtType && !v.districtName
-  return stateOnly && v.state
-    ? { ...v, districtType: STATE_DISTRICT_TYPE, districtName: v.state }
-    : v
+const districtInputShape = {
+  state: stateSchema.optional(),
+  districtId: districtIdSchema,
+  districtType: z.string().optional(),
+  districtName: z.string().optional(),
 }
 
-export const listPeopleSchema = z
-  .object({
-    state: stateSchema.optional(),
-    districtId: districtIdSchema,
-    districtType: z.string().optional(),
-    districtName: z.string().optional(),
-    filters: filtersSchema,
-    search: z.string().optional(),
-    resultsPerPage: z.coerce.number().optional().default(50),
-    page: z.coerce.number().optional().default(1),
-  })
-  .refine(districtEitherRefine, districtEitherMessage)
-  .refine(districtStateNameRefine, districtStateNameMessage)
-  .transform(normalizeStateOnlyDistrict)
-
-export class ListPeopleDTO extends createZodDto(listPeopleSchema) {}
-
-export const downloadPeopleSchema = z
-  .object({
-    state: stateSchema.optional(),
-    districtId: districtIdSchema,
-    districtType: z.string().optional(),
-    districtName: z.string().optional(),
-    electionLocation: z.string().optional(),
-    electionType: z.string().optional(),
-    filters: filtersSchema,
-  })
-  .refine(districtEitherRefine, districtEitherMessage)
-  .refine(districtStateNameRefine, districtStateNameMessage)
-  .transform(normalizeStateOnlyDistrict)
-
-export class DownloadPeopleDTO extends createZodDto(downloadPeopleSchema) {}
-
-export class StatsDTO extends createZodDto(
+const withDistrictInput = <T extends z.ZodRawShape>(shape: T) =>
   z
     .object({
-      state: stateSchema.optional(),
-      districtId: districtIdSchema,
-      districtType: z.string().optional(),
-      districtName: z.string().optional(),
+      ...districtInputShape,
+      ...shape,
     })
     .refine(districtEitherRefine, districtEitherMessage)
     .refine(districtStateNameRefine, districtStateNameMessage)
-    .transform(normalizeStateOnlyDistrict),
-) {}
 
-export const samplePeopleSchema = z
-  .object({
-    state: stateSchema.optional(),
-    districtId: districtIdSchema,
-    districtType: z.string().optional(),
-    districtName: z.string().optional(),
-    size: z.coerce.number().int().min(1).max(10000).optional().default(500),
-    hasCellPhone: z.coerce.boolean().optional(),
-    excludeIds: z.array(z.string().uuid()).optional(),
-  })
-  .refine(districtEitherRefine, districtEitherMessage)
-  .refine(districtStateNameRefine, districtStateNameMessage)
-  .transform(normalizeStateOnlyDistrict)
+export const listPeopleSchema = withDistrictInput({
+  filters: filtersSchema,
+  search: z.string().optional(),
+  resultsPerPage: z.coerce.number().optional().default(50),
+  page: z.coerce.number().optional().default(1),
+})
+
+export class ListPeopleDTO extends createZodDto(listPeopleSchema) {}
+
+export const downloadPeopleSchema = withDistrictInput({
+  electionLocation: z.string().optional(),
+  electionType: z.string().optional(),
+  filters: filtersSchema,
+})
+
+export class DownloadPeopleDTO extends createZodDto(downloadPeopleSchema) {}
+
+export class StatsDTO extends createZodDto(withDistrictInput({})) {}
+
+export const samplePeopleSchema = withDistrictInput({
+  size: z.coerce.number().int().min(1).max(10000).optional().default(500),
+  hasCellPhone: z.coerce.boolean().optional(),
+  excludeIds: z.array(z.string().uuid()).optional(),
+})
 
 export class SamplePeopleDTO extends createZodDto(samplePeopleSchema) {}
 
@@ -124,16 +88,7 @@ export class GetPersonParamsDTO extends createZodDto(
   }),
 ) {}
 
-export const getPersonQuerySchema = z
-  .object({
-    state: stateSchema.optional(),
-    districtId: districtIdSchema,
-    districtType: z.string().optional(),
-    districtName: z.string().optional(),
-  })
-  .refine(districtEitherRefine, districtEitherMessage)
-  .refine(districtStateNameRefine, districtStateNameMessage)
-  .transform(normalizeStateOnlyDistrict)
+export const getPersonQuerySchema = withDistrictInput({})
 
 export class GetPersonQueryDTO extends createZodDto(getPersonQuerySchema) {}
 

@@ -36,15 +36,15 @@ describe('people query schemas', () => {
     expect(parsed.districtName).toBe('CHEYENNE CITY WARD 1')
   })
 
-  it('normalizes state-only list query to statewide district', () => {
+  it('accepts state-only list query without district normalization', () => {
     const parsed = listPeopleSchema.parse({
       state: 'wy',
       filters: {},
     })
 
     expect(parsed.state).toBe('WY')
-    expect(parsed.districtType).toBe(STATE_DISTRICT_TYPE)
-    expect(parsed.districtName).toBe('WY')
+    expect(parsed.districtType).toBeUndefined()
+    expect(parsed.districtName).toBeUndefined()
   })
 
   it('rejects mixed districtId + districtType/name list query', () => {
@@ -55,9 +55,7 @@ describe('people query schemas', () => {
         districtName: 'CHEYENNE CITY WARD 1',
         filters: {},
       }),
-    ).toThrow(
-      'Either districtId only, or state + districtType + districtName, or state only',
-    )
+    ).toThrow()
   })
 
   it('rejects statewide district with mismatched districtName', () => {

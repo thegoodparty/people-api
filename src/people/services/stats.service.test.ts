@@ -67,6 +67,24 @@ describe('StatsService', () => {
     expect(result.districtId).toBe('district-by-type-name')
   })
 
+  it('resolves districtId from state-only using statewide district', async () => {
+    mockPrisma.districtStats.findUnique.mockResolvedValue({
+      districtId: 'district-by-type-name',
+      totalConstituents: 250,
+    })
+
+    const result = await service.getStats({
+      state: 'WY',
+    } as never)
+
+    expect(mockDistrictService.findDistrictId).toHaveBeenCalledWith({
+      state: 'WY',
+      type: 'State',
+      name: 'WY',
+    })
+    expect(result.districtId).toBe('district-by-type-name')
+  })
+
   it('throws NotFoundException when stats are missing', async () => {
     mockPrisma.districtStats.findUnique.mockResolvedValue(null)
 
