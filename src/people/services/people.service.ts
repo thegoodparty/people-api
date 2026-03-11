@@ -73,7 +73,7 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
         : Prisma.empty
 
     const result = await this.client.$queryRaw<BaseDbPerson[]>(
-      Prisma.sql`${select} FROM "green"."Voter" v WHERE v."id" = ${id}::uuid AND v."State" = CAST(${state}::text AS "public"."USState") ${districtExistsClause}`,
+      Prisma.sql`${select} FROM "green"."Voter" v WHERE v."id" = ${id}::uuid AND v."State" = CAST(${state}::text AS "green"."USState") ${districtExistsClause}`,
     )
     if (!result.length) {
       if (districtId && !useVoterOnlyPath) {
@@ -250,11 +250,11 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
 
     const parts: Prisma.Sql[] = []
     parts.push(
-      Prisma.sql`v."State" = CAST(${state}::text AS "public"."USState")`,
+      Prisma.sql`v."State" = CAST(${state}::text AS "green"."USState")`,
     )
     if (districtId) {
       parts.push(
-        Prisma.sql`dv."State" = CAST(${state}::text AS "public"."USState")`,
+        Prisma.sql`dv."State" = CAST(${state}::text AS "green"."USState")`,
       )
       parts.push(Prisma.sql`dv."district_id" = ${districtId}::uuid`)
       parts.push(Prisma.sql`dv."voter_id" IS NOT NULL`)
