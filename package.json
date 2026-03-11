@@ -64,7 +64,6 @@
     "murmurhash": "^2.0.1",
     "nestjs-pino": "^4.4.1",
     "nestjs-zod": "^4.3.1",
-    "newrelic": "^11.20.0",
     "pino-http": "^10.5.0",
     "prisma": "^6.4.1",
     "prisma-json-types-generator": "^3.6.2",
