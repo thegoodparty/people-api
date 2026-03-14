@@ -64,6 +64,15 @@ export const listPeopleSchema = withDistrictInput({
 
 export class ListPeopleDTO extends createZodDto(listPeopleSchema) {}
 
+export const countPeopleSchema = withDistrictInput({
+  filters: filtersSchema,
+  search: z.string().optional(),
+  resultsPerPage: z.coerce.number().optional().default(50),
+  page: z.coerce.number().optional().default(1),
+})
+
+export class CountPeopleDTO extends createZodDto(countPeopleSchema) {}
+
 export const downloadPeopleSchema = withDistrictInput({
   electionLocation: z.string().optional(),
   electionType: z.string().optional(),

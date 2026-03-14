@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Param, Query, Res, Body } from '@nestjs/common'
 import {
+  CountPeopleDTO,
   DownloadPeopleDTO,
   GetPersonParamsDTO,
   GetPersonQueryDTO,
@@ -21,6 +22,11 @@ export class PeopleController {
   @Post()
   listPeople(@Body() filterDto: ListPeopleDTO) {
     return this.peopleService.findPeople(filterDto)
+  }
+
+  @Post('count')
+  countPeople(@Body() filterDto: CountPeopleDTO) {
+    return this.peopleService.countPeople(filterDto)
   }
 
   @Post('download')

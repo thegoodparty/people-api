@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
 import {
+  CountPeopleDTO,
   DownloadPeopleDTO,
   GetPersonQueryDTO,
   ListPeopleDTO,
@@ -90,31 +91,47 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     const { filters, search, resultsPerPage, page } = dto
     const effectiveDistrictId = useVoterOnlyPath ? null : districtId
 
-    // TODO: This executes count and data query in parallel
-    // for latency, but the data query uses the requested page offset while
-    // currentPage is clamped from totalResults below. If requested page is out
-    // of bounds, pagination metadata and returned rows can diverge.
-    const [totalResults, people] = await Promise.all([
-      this.rawCountForDistrict({
-        state,
+    const fetchSize = resultsPerPage + 1
+    const rows = await this.client.$queryRaw<Array<BaseDbPerson>>(
+      this.buildRawPeopleQuery({
         districtId: effectiveDistrictId,
-        filters,
-        search,
-      }),
-      this.client.$queryRaw<Array<BaseDbPerson>>(
-        this.buildRawPeopleQuery({
+        whereClause: this.rawBuildWhere({
+          state,
           districtId: effectiveDistrictId,
-          whereClause: this.rawBuildWhere({
-            state,
-            districtId: effectiveDistrictId,
-            filters,
-            search,
-          }),
-          take: resultsPerPage,
-          skip: (page - 1) * resultsPerPage,
+          filters,
+          search,
         }),
-      ),
-    ])
+        take: fetchSize,
+        skip: (page - 1) * resultsPerPage,
+      }),
+    )
+
+    const hasNextPage = rows.length > resultsPerPage
+    const people = hasNextPage ? rows.slice(0, resultsPerPage) : rows
+
+    return {
+      pagination: {
+        currentPage: page,
+        pageSize: resultsPerPage,
+        hasNextPage,
+        hasPreviousPage: page > 1,
+      },
+      people: people.map(transformToPersonOutput),
+    }
+  }
+
+  async countPeople(dto: CountPeopleDTO) {
+    const resolved = await resolveDistrict(this.districtService, dto)
+    const { state, useVoterOnlyPath, districtId } = resolved
+    const { filters, search, resultsPerPage, page } = dto
+    const effectiveDistrictId = useVoterOnlyPath ? null : districtId
+
+    const totalResults = await this.rawCountForDistrict({
+      state,
+      districtId: effectiveDistrictId,
+      filters,
+      search,
+    })
 
     const totalPages = Math.max(1, Math.ceil(totalResults / resultsPerPage))
     const currentPage = Math.min(Math.max(1, page), totalPages)
@@ -128,7 +145,6 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
         hasNextPage: currentPage < totalPages,
         hasPreviousPage: currentPage > 1,
       },
-      people: people.map(transformToPersonOutput),
     }
   }
 
