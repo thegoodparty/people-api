@@ -6,6 +6,7 @@
   "private": true,
   "license": "CC0-1.0",
   "scripts": {
+    "ai-rules:update": "git submodule update --remote ai-rules",
     "build": "nest build",
     "test": "vitest run",
     "test:watch": "vitest",
