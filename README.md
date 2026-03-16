@@ -82,3 +82,7 @@ npm run seed
 This will generate 100 fake voter records with realistic demographic data, voting history, and district information. The seeding uses the `@faker-js/faker` library to generate realistic data.
 
 See [seed/README.md](seed/README.md) for more details on the seeding pattern and how to extend it.
+
+## AI-Assisted Development
+
+We use [Claude Code](https://claude.ai/code) for AI-assisted development. Project-specific context lives in `CLAUDE.md` at the repo root. If you find yourself teaching the AI the same thing more than once, add it to `CLAUDE.md` so all future sessions (for the whole team) benefit.
