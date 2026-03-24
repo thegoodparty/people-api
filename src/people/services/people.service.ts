@@ -61,22 +61,21 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
     const resolved = await resolveDistrict(this.districtService, query)
     const { districtId, state, useVoterOnlyPath } = resolved
     const select = buildVoterSelectSql().sql
-    const districtExistsClause =
-      districtId && !useVoterOnlyPath
-        ? Prisma.sql`AND EXISTS (
+    const districtExistsClause = !useVoterOnlyPath
+      ? Prisma.sql`AND EXISTS (
             SELECT 1
             FROM green."DistrictVoter" dv
             JOIN green."District" d ON d."id" = dv."district_id"
             WHERE dv."voter_id" = v."id"
               AND d."id" = ${districtId}::uuid
           )`
-        : Prisma.empty
+      : Prisma.empty
 
     const result = await this.client.$queryRaw<BaseDbPerson[]>(
       Prisma.sql`${select} FROM "green"."Voter" v WHERE v."id" = ${id}::uuid AND v."State" = CAST(${state}::text AS "public"."USState") ${districtExistsClause}`,
     )
     if (!result.length) {
-      if (districtId && !useVoterOnlyPath) {
+      if (!useVoterOnlyPath) {
         throw new NotFoundException('Person not found in district')
       }
       throw new NotFoundException(`Person with ID ${id} not found`)
@@ -133,9 +132,8 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
   }
 
   async streamPeopleCsv(dto: DownloadPeopleDTO, res: FastifyReply) {
-    const resolved = await resolveDistrict(this.districtService, dto)
     const { state, useVoterOnlyPath, districtId, districtType, districtName } =
-      resolved
+      await resolveDistrict(this.districtService, dto)
     const { filters } = dto
     const effectiveDistrictId = useVoterOnlyPath ? null : districtId
     const whereClause = this.rawBuildWhere({
@@ -214,8 +212,8 @@ export class PeopleService extends createPrismaBase(MODELS.Voter) {
           for (const key of columnNames) {
             row[key] = person[key as keyof typeof person] as CsvValue
           }
-          row.electionLocation = districtName ?? ''
-          row.electionType = districtType ?? ''
+          row.electionLocation = districtName
+          row.electionType = districtType
 
           const canContinue = csvStream.write(row)
           if (!canContinue) {

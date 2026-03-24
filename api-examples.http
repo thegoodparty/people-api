@@ -1,37 +1,29 @@
-### List people from a district
-GET http://localhost:3002/v1/people?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)
+### List people from a district (replace DISTRICT_ID with a real UUID)
+POST http://localhost:3002/v1/people
+Content-Type: application/json
+
+{"districtId": "REPLACE_WITH_DISTRICT_ID", "filters": {}}
 
 ### List people with language and voter status filters
-GET http://localhost:3002/v1/people?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)&resultsPerPage=50&page=1&filter[languageCode][in][]=EN&filter[languageCode][in][]=ES&filter[voterStatus][eq]=Active
+POST http://localhost:3002/v1/people
+Content-Type: application/json
 
-### List people where educationOfPerson is non-null
-GET http://localhost:3002/v1/people?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)&filter[educationOfPerson][is]=not_null
-
-### List people with registeredVoter true or false (boolean IN)
-GET http://localhost:3002/v1/people?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)&filter[registeredVoter][in][]=true&filter[registeredVoter][in][]=false
+{"districtId": "REPLACE_WITH_DISTRICT_ID", "filters": {"languageCode": {"in": ["EN", "ES"]}, "voterStatus": {"eq": "Active"}}, "resultsPerPage": 50, "page": 1}
 
 ### Download CSV with veteranStatus IN and presenceOfChildren is null
-GET http://localhost:3002/v1/people/download?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)&filter[veteranStatus][in][]=Yes&filter[veteranStatus][in][]=No&filter[presenceOfChildren][is]=null
+POST http://localhost:3002/v1/people/download
+Content-Type: application/json
 
-### Stats: basic defaults (age, homeowner, income, education, family)
-GET http://localhost:3002/v1/people/stats?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)
+{"districtId": "REPLACE_WITH_DISTRICT_ID", "filters": {"veteranStatus": {"in": ["Yes", "No"]}, "presenceOfChildren": {"is": "null"}}}
 
-### Stats: add facets (gender and partiesDescription) and limit topN
-GET http://localhost:3002/v1/people/stats?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)&categories[]=gender&categories[]=partiesDescription&topN=5
+### Stats for a district
+GET http://localhost:3002/v1/people/stats?districtId=REPLACE_WITH_DISTRICT_ID
 
-### Stats: custom numeric buckets for age and income (uses Estimated_Income_Amount_Int)
-# Note: numericBuckets uses inclusive ranges [min,max]
-GET http://localhost:3002/v1/people/stats?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)&numericBuckets[ageInt][]=18,25&numericBuckets[ageInt][]=26,35&numericBuckets[ageInt][]=36,49&numericBuckets[ageInt][]=50,200&numericBuckets[estimatedIncomeAmountInt][]=0,40000&numericBuckets[estimatedIncomeAmountInt][]=40001,80000&numericBuckets[estimatedIncomeAmountInt][]=80001,120000&numericBuckets[estimatedIncomeAmountInt][]=120001,1000000000
+### Sample from a district
+POST http://localhost:3002/v1/people/sample
+Content-Type: application/json
 
-### Stats: with demographic filter (registeredVoter true, veteranStatus in Yes/No)
-GET http://localhost:3002/v1/people/stats?state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)&filter[registeredVoter][eq]=true&filter[veteranStatus][in][]=Yes&filter[veteranStatus][in][]=No
+{"districtId": "REPLACE_WITH_DISTRICT_ID", "size": 500}
 
-### Search voters by phone
-GET http://localhost:3002/v1/people/search?phone=307-248-0741&state=WY
-
-### Search voters by name
-GET http://localhost:3002/v1/people/search?name=David%20Hokanson&state=WY
-
-### Search voters by first and last name with district
-GET http://localhost:3002/v1/people/search?firstName=David&lastName=Hokanson&state=WY&districtType=Unified_School_District&districtName=LINCOLN%20CNTY%20SD%202%20(EST.)&page=1&resultsPerPage=25
-
+### Get single person
+GET http://localhost:3002/v1/people/REPLACE_WITH_PERSON_ID?districtId=REPLACE_WITH_DISTRICT_ID

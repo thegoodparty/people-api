@@ -3,6 +3,15 @@ import { Trend, Rate } from 'k6/metrics'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { buildUrl, buildHeaders } = require('./common.js')
 
+const DISTRICT_PEOPLE_SMALL =
+  __ENV.DISTRICT_PEOPLE_SMALL || '22f911d1-8262-ec9d-257f-7bb0ccb563c1'
+const DISTRICT_PEOPLE_LARGE =
+  __ENV.DISTRICT_PEOPLE_LARGE || '7e38d7a0-bb29-99bc-74c6-cadd54f1afc7'
+const DISTRICT_STATS_LARGE =
+  __ENV.DISTRICT_STATS_LARGE || '47b7b5fb-5edf-70dc-5448-ef5f545a4793'
+const DISTRICT_SAMPLE_SMALL =
+  __ENV.DISTRICT_SAMPLE_SMALL || 'd79c532c-ee5f-cf01-758f-bd62d4fca41c'
+
 export const options = {
   scenarios: {
     mixed: {
@@ -110,9 +119,7 @@ export function runMixed() {
     url = buildUrl('/people')
     method = 'POST'
     body = JSON.stringify({
-      state: 'WY',
-      districtType: 'County_Commissioner_District',
-      districtName: 'SWEETWATER CNTY-ROCK SPRINGS NORTH CCD (EST.)',
+      districtId: DISTRICT_PEOPLE_SMALL,
       filters: {
         gender: { is: 'not_null' },
         educationLevel: { is: 'not_null' },
@@ -126,9 +133,7 @@ export function runMixed() {
     url = buildUrl('/people')
     method = 'POST'
     body = JSON.stringify({
-      state: 'TX',
-      districtType: 'City',
-      districtName: 'DALLAS CITY (EST.)',
+      districtId: DISTRICT_PEOPLE_LARGE,
       filters: {
         gender: { is: 'not_null' },
         educationLevel: { is: 'not_null' },
@@ -140,18 +145,14 @@ export function runMixed() {
     }
   } else if (cohort === 'stats_large') {
     url = buildUrl('/people/stats', {
-      state: 'WI',
-      districtType: 'City',
-      districtName: 'MILWAUKEE CITY',
+      districtId: DISTRICT_STATS_LARGE,
     })
     headers = buildHeaders('perf:mixed stats large')
   } else {
     url = buildUrl('/people/sample')
     method = 'POST'
     body = JSON.stringify({
-      state: 'FL',
-      districtType: 'City',
-      districtName: 'NICEVILLE CITY (EST.)',
+      districtId: DISTRICT_SAMPLE_SMALL,
       size: 1000,
     })
     headers = {
