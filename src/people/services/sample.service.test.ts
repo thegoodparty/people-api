@@ -1,13 +1,11 @@
 import { BadRequestException } from '@nestjs/common'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { STATE_DISTRICT_TYPE } from '../people.schema'
 import { SampleService } from './sample.service'
 
 describe('SampleService', () => {
   let service: SampleService
   let mockDistrictService: {
     findDistrictById: ReturnType<typeof vi.fn>
-    findDistrictId: ReturnType<typeof vi.fn>
   }
   let mockStatsService: {
     getTotalCounts: ReturnType<typeof vi.fn>
@@ -24,7 +22,6 @@ describe('SampleService', () => {
         name: 'CHEYENNE CITY WARD 1',
         state: 'WY',
       }),
-      findDistrictId: vi.fn().mockResolvedValue('statewide-district-id'),
     }
 
     mockStatsService = {
@@ -60,7 +57,7 @@ describe('SampleService', () => {
     })
   }
 
-  it('uses district mode for districtId-only queries', async () => {
+  it('uses district mode for non-state district', async () => {
     wireTransactionResults([[{ id: 'person-1', State: 'WY' }]])
 
     const result = await service.samplePeople({
@@ -72,31 +69,31 @@ describe('SampleService', () => {
     expect(mockDistrictService.findDistrictById).toHaveBeenCalledWith(
       '0e5bafca-93a9-86a5-2522-f373979720df',
     )
-    expect(mockDistrictService.findDistrictId).not.toHaveBeenCalled()
     expect(mockStatsService.getTotalCounts).toHaveBeenCalledWith(
       '0e5bafca-93a9-86a5-2522-f373979720df',
     )
     expect(result).toHaveLength(1)
   })
 
-  it('uses state-only mode and resolves statewide district id when only state is provided', async () => {
+  it('uses state-only mode for state district', async () => {
+    mockDistrictService.findDistrictById.mockResolvedValue({
+      id: 'district-wy',
+      type: 'State',
+      name: 'WY',
+      state: 'WY',
+    })
     wireTransactionResults([[{ id: 'person-2', State: 'WY' }]])
 
     const result = await service.samplePeople({
-      state: 'WY',
+      districtId: 'district-wy',
       size: 1,
       hasCellPhone: false,
     })
 
-    expect(mockDistrictService.findDistrictById).not.toHaveBeenCalled()
-    expect(mockDistrictService.findDistrictId).toHaveBeenCalledWith({
-      state: 'WY',
-      type: STATE_DISTRICT_TYPE,
-      name: 'WY',
-    })
-    expect(mockStatsService.getTotalCounts).toHaveBeenCalledWith(
-      'statewide-district-id',
+    expect(mockDistrictService.findDistrictById).toHaveBeenCalledWith(
+      'district-wy',
     )
+    expect(mockStatsService.getTotalCounts).toHaveBeenCalledWith('district-wy')
     expect(result).toHaveLength(1)
   })
 

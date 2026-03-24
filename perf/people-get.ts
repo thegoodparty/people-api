@@ -2,6 +2,15 @@ import http from 'k6/http'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { buildUrl, recordMetrics, buildHeaders } = require('./common.js')
 
+const DISTRICT_SMALL =
+  __ENV.DISTRICT_SMALL || '22f911d1-8262-ec9d-257f-7bb0ccb563c1'
+const DISTRICT_LARGE =
+  __ENV.DISTRICT_LARGE || '7e38d7a0-bb29-99bc-74c6-cadd54f1afc7'
+const DISTRICT_SMALL_FILTERS =
+  __ENV.DISTRICT_SMALL_FILTERS || '0d04f04f-ace2-e4e4-c056-de86c8f4f377'
+const DISTRICT_LARGE_FILTERS =
+  __ENV.DISTRICT_LARGE_FILTERS || 'fed71a30-f074-37bf-bb9d-8e2acda1bd1c'
+
 const baseScenarios = {
   small: { executor: 'constant-vus', vus: 3, duration: '30s', exec: 'small' },
   large: {
@@ -55,9 +64,7 @@ export const options =
 export function small() {
   const url = buildUrl('/people')
   const body = JSON.stringify({
-    state: 'WY',
-    districtType: 'County_Commissioner_District',
-    districtName: 'SWEETWATER CNTY-ROCK SPRINGS NORTH CCD (EST.)',
+    districtId: DISTRICT_SMALL,
     filters: {
       gender: { is: 'not_null' },
       educationLevel: { is: 'not_null' },
@@ -75,9 +82,7 @@ export function small() {
 export function large() {
   const url = buildUrl('/people')
   const body = JSON.stringify({
-    state: 'TX',
-    districtType: 'City',
-    districtName: 'DALLAS CITY (EST.)',
+    districtId: DISTRICT_LARGE,
     filters: {
       gender: { is: 'not_null' },
       educationLevel: { is: 'not_null' },
@@ -95,9 +100,7 @@ export function large() {
 export function small_full_filters() {
   const url = buildUrl('/people')
   const body = JSON.stringify({
-    state: 'NH',
-    districtType: 'City',
-    districtName: 'CONCORD CITY',
+    districtId: DISTRICT_SMALL_FILTERS,
     filters: {
       hasCellPhone: true,
       hasLandline: false,
@@ -128,9 +131,7 @@ export function small_full_filters() {
 export function large_full_filters() {
   const url = buildUrl('/people')
   const body = JSON.stringify({
-    state: 'OH',
-    districtType: 'City',
-    districtName: 'COLUMBUS CITY (EST.)',
+    districtId: DISTRICT_LARGE_FILTERS,
     filters: {
       hasCellPhone: true,
       hasLandline: false,
