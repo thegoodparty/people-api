@@ -2,6 +2,10 @@ import http from 'k6/http'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { buildUrl, recordMetrics, buildHeaders } = require('./common.js')
 
+// Replace these with real district UUIDs from your database
+const DISTRICT_SMALL = __ENV.DISTRICT_SMALL || 'REPLACE_WITH_SMALL_DISTRICT_ID'
+const DISTRICT_LARGE = __ENV.DISTRICT_LARGE || 'REPLACE_WITH_LARGE_DISTRICT_ID'
+
 const baseScenarios = {
   small: { executor: 'constant-vus', vus: 3, duration: '30s', exec: 'small' },
   large: {
@@ -23,9 +27,7 @@ export const options =
 export function small() {
   const url = buildUrl('/people/sample')
   const body = JSON.stringify({
-    state: 'FL',
-    districtType: 'City',
-    districtName: 'NICEVILLE CITY (EST.)',
+    districtId: DISTRICT_SMALL,
     size: 1000,
   })
   const res = http.post(url, body, {
@@ -40,9 +42,7 @@ export function small() {
 export function large() {
   const url = buildUrl('/people/sample')
   const body = JSON.stringify({
-    state: 'FL',
-    districtType: 'City',
-    districtName: 'JACKSONVILLE CITY (EST.)',
+    districtId: DISTRICT_LARGE,
     size: 1000,
   })
   const res = http.post(url, body, {

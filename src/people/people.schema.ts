@@ -1,59 +1,10 @@
 import { createZodDto } from 'nestjs-zod'
-import { USState } from '@prisma/client'
 import { z } from 'zod'
 
 import { filtersSchema } from './schemas/filters.schema'
 
-export const STATE_DISTRICT_TYPE = 'State'
-
-const stateSchema = z.preprocess(
-  (v) => (typeof v === 'string' ? v.toUpperCase() : v),
-  z.nativeEnum(USState),
-)
-
-const districtIdSchema = z.string().uuid().optional()
-
-const districtEitherRefine = (v: {
-  districtId?: string
-  state?: string
-  districtType?: string
-  districtName?: string
-}) =>
-  (!!v.districtId && !v.state && !v.districtType && !v.districtName) ||
-  (!!v.state && !v.districtId && !!v.districtType && !!v.districtName) ||
-  (!!v.state && !v.districtId && !v.districtType && !v.districtName)
-
-const districtEitherMessage =
-  'Either districtId only, or state + districtType + districtName, or state only'
-
-const districtStateNameRefine = (v: {
-  districtType?: string
-  districtName?: string
-  state?: string
-}) =>
-  v.districtType !== STATE_DISTRICT_TYPE ||
-  (v.districtName != null &&
-    v.state != null &&
-    v.districtName.toUpperCase() === v.state.toUpperCase())
-
-const districtStateNameMessage =
-  'When districtType is State, districtName must equal state'
-
-const districtInputShape = {
-  state: stateSchema.optional(),
-  districtId: districtIdSchema,
-  districtType: z.string().optional(),
-  districtName: z.string().optional(),
-}
-
 const withDistrictInput = <T extends z.ZodRawShape>(shape: T) =>
-  z
-    .object({
-      ...districtInputShape,
-      ...shape,
-    })
-    .refine(districtEitherRefine, districtEitherMessage)
-    .refine(districtStateNameRefine, districtStateNameMessage)
+  z.object({ districtId: z.string().uuid() }).extend(shape)
 
 export const listPeopleSchema = withDistrictInput({
   filters: filtersSchema,
@@ -65,8 +16,6 @@ export const listPeopleSchema = withDistrictInput({
 export class ListPeopleDTO extends createZodDto(listPeopleSchema) {}
 
 export const downloadPeopleSchema = withDistrictInput({
-  electionLocation: z.string().optional(),
-  electionType: z.string().optional(),
   filters: filtersSchema,
 })
 

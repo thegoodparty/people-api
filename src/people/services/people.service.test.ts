@@ -52,7 +52,6 @@ describe('PeopleService', () => {
   let mockSampleService: { samplePeople: ReturnType<typeof vi.fn> }
   let mockDistrictService: {
     findDistrictById: ReturnType<typeof vi.fn>
-    findDistrictId: ReturnType<typeof vi.fn>
   }
   let mockStatsService: {
     getTotalCounts: ReturnType<typeof vi.fn>
@@ -72,7 +71,6 @@ describe('PeopleService', () => {
         name: 'CHEYENNE CITY WARD 1',
         state: 'WY',
       }),
-      findDistrictId: vi.fn().mockResolvedValue('district-by-type-name'),
     }
     mockStatsService = {
       getTotalCounts: vi.fn().mockResolvedValue({
@@ -97,7 +95,7 @@ describe('PeopleService', () => {
   })
 
   describe('findPeople query modes and pagination', () => {
-    it('uses districtId-only path via findDistrictById and fast count path', async () => {
+    it('resolves district by id and uses fast count path', async () => {
       mockClient.$queryRaw.mockResolvedValueOnce([makeDbPerson()])
 
       const result = await service.findPeople({
@@ -110,7 +108,6 @@ describe('PeopleService', () => {
       expect(mockDistrictService.findDistrictById).toHaveBeenCalledWith(
         '0e5bafca-93a9-86a5-2522-f373979720df',
       )
-      expect(mockDistrictService.findDistrictId).not.toHaveBeenCalled()
       expect(mockStatsService.getTotalCounts).toHaveBeenCalledWith(
         '0e5bafca-93a9-86a5-2522-f373979720df',
       )
@@ -119,43 +116,24 @@ describe('PeopleService', () => {
       expect(result.people.length).toBeGreaterThan(0)
     })
 
-    it('uses state+type+name path via findDistrictId', async () => {
-      mockClient.$queryRaw.mockResolvedValueOnce([makeDbPerson()])
-
-      const result = await service.findPeople({
+    it('uses voter-only path for state district', async () => {
+      mockDistrictService.findDistrictById.mockResolvedValue({
+        id: 'district-wy',
+        type: 'State',
+        name: 'WY',
         state: 'WY',
-        districtType: 'City_Ward',
-        districtName: 'CHEYENNE CITY WARD 1',
-        filters: { filters: [], filterOperators: {} },
-        resultsPerPage: 10,
-        page: 1,
-      } as never)
-
-      expect(mockDistrictService.findDistrictId).toHaveBeenCalledWith({
-        state: 'WY',
-        type: 'City_Ward',
-        name: 'CHEYENNE CITY WARD 1',
       })
-      expect(mockStatsService.getTotalCounts).toHaveBeenCalledWith(
-        'district-by-type-name',
-      )
-      expect(result.pagination.totalResults).toBe(120)
-    })
-
-    it('uses voter-only state path when only state is provided', async () => {
       mockClient.$queryRaw
         .mockResolvedValueOnce([{ voter_count: 42n }])
         .mockResolvedValueOnce([makeDbPerson({ id: 'person-2' })])
 
       const result = await service.findPeople({
-        state: 'WY',
+        districtId: 'district-wy',
         filters: { filters: [], filterOperators: {} },
         resultsPerPage: 10,
         page: 1,
       } as never)
 
-      expect(mockDistrictService.findDistrictById).not.toHaveBeenCalled()
-      expect(mockDistrictService.findDistrictId).not.toHaveBeenCalled()
       expect(mockStatsService.getTotalCounts).not.toHaveBeenCalled()
       expect(result.pagination.totalResults).toBe(42)
       expect(result.people[0]?.id).toBe('person-2')
@@ -223,7 +201,7 @@ describe('PeopleService', () => {
   })
 
   describe('findPerson', () => {
-    it('returns person for districtId-only path', async () => {
+    it('returns person for district path', async () => {
       mockClient.$queryRaw.mockResolvedValueOnce([makeDbPerson({ id: 'person-ok' })])
 
       const person = await service.findPerson('person-ok', {
@@ -235,7 +213,7 @@ describe('PeopleService', () => {
       expect(mockDistrictService.findDistrictById).toHaveBeenCalled()
     })
 
-    it('returns district-specific not found message for district-bound query', async () => {
+    it('returns district-specific not found message for non-state district', async () => {
       mockClient.$queryRaw.mockResolvedValueOnce([])
 
       await expect(
@@ -245,11 +223,19 @@ describe('PeopleService', () => {
       ).rejects.toThrow(new NotFoundException('Person not found in district'))
     })
 
-    it('returns generic not found message for voter-only query', async () => {
+    it('returns generic not found message for state district', async () => {
+      mockDistrictService.findDistrictById.mockResolvedValue({
+        id: 'district-wy',
+        type: 'State',
+        name: 'WY',
+        state: 'WY',
+      })
       mockClient.$queryRaw.mockResolvedValueOnce([])
 
       await expect(
-        service.findPerson('person-1', { state: 'WY' } as never),
+        service.findPerson('person-1', {
+          districtId: 'district-wy',
+        } as never),
       ).rejects.toThrow(new NotFoundException('Person with ID person-1 not found'))
     })
   })
