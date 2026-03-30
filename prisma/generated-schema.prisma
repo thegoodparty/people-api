@@ -1,0 +1,42 @@
+generator client {
+  provider        = "prisma-client-js"
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model Campaign {
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String         @db.VarChar(255)
+  description     String?
+  slug            String         @unique @db.VarChar(100)
+  budget          Int            @default(0)
+  conversion_rate Decimal?       @db.Decimal(5, 4)
+  impressions     BigInt?        @default(0)
+  is_active       Boolean        @default(true)
+  is_featured     Boolean?       @default(false)
+  start_date      DateTime?
+  end_date        DateTime?
+  created_at      DateTime       @default(now())
+  updated_at      DateTime       @default(now())
+  metadata        Json?
+  settings        Json?          @db.Json
+  tags            String[]
+  status          CampaignStatus @default(DRAFT)
+  owner_voter_id  String?        @db.VarChar(255)
+
+  @@index([created_at(sort: Desc)])
+  @@index([start_date, end_date], map: "Campaign_date_range_idx")
+  @@index([metadata], map: "Campaign_metadata_gin_idx", type: Gin)
+  @@index([slug])
+  @@index([status])
+  @@index([tags], map: "Campaign_tags_gin_idx", type: Gin)
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
