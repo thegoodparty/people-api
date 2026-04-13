@@ -2,20 +2,11 @@
 
 # Instructions:
 
-Run the downloader:
+For local development and testing, you can seed the database with fake voter data:
 
 ```
-npm run download
+npm run seed
 ```
-
-When the downloader is complete:
-Run the loader:
-
-```
-npm run load
-```
-
-The downloads are tracked in the VoterFile model and their counts are verified after loading. Only newer files are loaded and appended to. Zip files are deleted and older files are also removed automatically. Any failed downloads are reported to slack.
 
 If you need to make any changes to the schema, you simply update the `Voter.prisma` schema
 and then Run the app to copy the schema to the state schemas:
