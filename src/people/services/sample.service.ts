@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
-import { samplePeopleSchema, STATE_DISTRICT_TYPE } from '../people.schema'
+import { samplePeopleSchema } from '../people.schema'
 import { BaseDbPerson, buildVoterSelectSql } from '../people.select'
 import { DistrictService } from 'src/district/services/district.service'
 import { z } from 'zod'
@@ -103,7 +103,7 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
     const hasCellPhone = dto.hasCellPhone ?? true
     const excludeIds = dto.excludeIds ?? []
 
-    const seed = hash32(`${resolvedDistrictId ?? state}:${Date.now() / 60_000}`)
+    const seed = hash32(`${resolvedDistrictId}:${Date.now() / 60_000}`)
 
     const outerWhereClause = this.buildOuterWhereSql(state, hasCellPhone)
     const { sql: voterSelect } = buildVoterSelectSql()
@@ -113,18 +113,12 @@ export class SampleService extends createPrismaBase(MODELS.Voter) {
           kind: 'stateOnly',
           state,
           hasCellPhone,
-          districtId:
-            resolvedDistrictId ??
-            (await this.districtService.findDistrictId({
-              state,
-              type: STATE_DISTRICT_TYPE,
-              name: state,
-            })),
+          districtId: resolvedDistrictId,
         }
       : {
           kind: 'district',
           state,
-          districtId: resolvedDistrictId!,
+          districtId: resolvedDistrictId,
         }
     const { districtId } = mode
 
