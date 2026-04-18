@@ -4,78 +4,44 @@ import {
   getPersonQuerySchema,
   listPeopleSchema,
   samplePeopleSchema,
-  STATE_DISTRICT_TYPE,
   StatsDTO,
 } from './people.schema'
 
 const DISTRICT_ID = '0e5bafca-93a9-86a5-2522-f373979720df'
 
 describe('people query schemas', () => {
-  it('accepts districtId-only list query', () => {
+  it('accepts districtId list query', () => {
     const parsed = listPeopleSchema.parse({
       districtId: DISTRICT_ID,
       filters: {},
     })
 
     expect(parsed.districtId).toBe(DISTRICT_ID)
-    expect(parsed.state).toBeUndefined()
-    expect(parsed.districtType).toBeUndefined()
-    expect(parsed.districtName).toBeUndefined()
   })
 
-  it('accepts state + districtType + districtName list query', () => {
-    const parsed = listPeopleSchema.parse({
-      state: 'wy',
-      districtType: 'City_Ward',
-      districtName: 'CHEYENNE CITY WARD 1',
-      filters: {},
-    })
-
-    expect(parsed.state).toBe('WY')
-    expect(parsed.districtType).toBe('City_Ward')
-    expect(parsed.districtName).toBe('CHEYENNE CITY WARD 1')
-  })
-
-  it('accepts state-only list query without district normalization', () => {
-    const parsed = listPeopleSchema.parse({
-      state: 'wy',
-      filters: {},
-    })
-
-    expect(parsed.state).toBe('WY')
-    expect(parsed.districtType).toBeUndefined()
-    expect(parsed.districtName).toBeUndefined()
-  })
-
-  it('rejects mixed districtId + districtType/name list query', () => {
+  it('rejects missing districtId', () => {
     expect(() =>
       listPeopleSchema.parse({
-        districtId: DISTRICT_ID,
-        districtType: 'City_Ward',
-        districtName: 'CHEYENNE CITY WARD 1',
         filters: {},
       }),
     ).toThrow()
   })
 
-  it('rejects statewide district with mismatched districtName', () => {
+  it('rejects invalid districtId format', () => {
     expect(() =>
       listPeopleSchema.parse({
-        state: 'WY',
-        districtType: STATE_DISTRICT_TYPE,
-        districtName: 'CO',
+        districtId: 'not-a-uuid',
         filters: {},
       }),
-    ).toThrow('When districtType is State, districtName must equal state')
+    ).toThrow()
   })
 
-  it('accepts districtId-only stats query', () => {
+  it('accepts districtId stats query', () => {
     const parsed = StatsDTO.create({ districtId: DISTRICT_ID })
     expect(parsed.districtId).toBe(DISTRICT_ID)
-    expect(parsed.state).toBeUndefined()
   })
 
-  it('accepts districtId-only sample query', () => {
+  it('accepts districtId sample query', () => {
     const parsed = samplePeopleSchema.parse({
       districtId: DISTRICT_ID,
       size: 25,
@@ -84,20 +50,18 @@ describe('people query schemas', () => {
     expect(parsed.size).toBe(25)
   })
 
-  it('accepts districtId-only download query', () => {
+  it('accepts districtId download query', () => {
     const parsed = downloadPeopleSchema.parse({
       districtId: DISTRICT_ID,
       filters: {},
     })
     expect(parsed.districtId).toBe(DISTRICT_ID)
-    expect(parsed.state).toBeUndefined()
   })
 
-  it('accepts districtId-only getPerson query', () => {
+  it('accepts districtId getPerson query', () => {
     const parsed = getPersonQuerySchema.parse({
       districtId: DISTRICT_ID,
     })
     expect(parsed.districtId).toBe(DISTRICT_ID)
-    expect(parsed.state).toBeUndefined()
   })
 })
