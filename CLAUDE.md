@@ -1,116 +1,99 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code and other AI agents working in `people-api`. Keep this file short — push detail into `docs/`.
 
-## Overview
+## Project
 
-people-api is a NestJS/Fastify internal API serving 200M+ US voter records sourced from L2 (voter data vendor). It is called exclusively by gp-api via S2S JWT authentication — there are no end-user-facing routes.
+NestJS/Fastify internal API serving 200M+ US voter records sourced from L2 (a voter-data vendor). Called exclusively by `gp-api` via S2S JWT — no end-user-facing routes. Postgres via Prisma; the `Voter` table lives in the `green` schema and is partitioned by state.
 
-## Commands
+## Commands (most-used first)
 
 ```bash
-npm run start:dev          # Dev server on :3002 (watches for changes)
-npm run build              # Production build (nest build)
-npm run test               # Run all tests (vitest run)
-npm run test:watch         # Watch mode (vitest)
-npx vitest run src/people/utils/filters.sql.utils.test.ts  # Single test file
-npm run lint               # ESLint with --fix
-npm run format             # Prettier
-npm run migrate:dev        # Prisma migrate dev
-npm run migrate:deploy     # Prisma migrate deploy (production)
-npm run generate           # Prisma generate (after schema changes)
-npm run seed               # Seed database
+npm run start:dev              # Dev server (:3002) with watch
+npm test                       # vitest run
+npx vitest run src/people/utils/filters.sql.utils.test.ts   # single file
+npm run test:watch             # watch mode
+npm run lint                   # eslint --fix on {src,apps,libs,test}/**/*.ts
+npm run lint-format            # lint + prettier --write
+npm run build                  # nest build → dist/
+
+npm run migrate:dev            # create/apply a migration
+npm run migrate:reset          # reset DB + migrate (LOCAL ONLY)
+npm run migrate:deploy         # apply pending migrations (CI/prod)
+npm run generate               # regenerate Prisma client
+npm run seed                   # @faker-js seed (local dev only)
+
+npm run ai-rules:update        # advance the ai-rules submodule pin
 ```
 
-## Architecture
+`npm run lint` runs `eslint --fix` — it mutates files. Stage your work first.
 
-### Module Structure
+## Pointer table — when in doubt
+
+| Doing | Read |
+|-------|------|
+| Adding an endpoint / module | `docs/architecture.md` § Module shape |
+| Touching the voter data flow | `docs/data-pipeline.md` |
+| First-time setup | `docs/getting-started.md` |
+| AI rule-by-rule code review | `ai-rules/` (git submodule) |
+
+## Code style
+
+- **No semicolons**, single quotes, trailing commas (`.prettierrc`)
+- `unused-imports/no-unused-imports` is an **error**
+- `@typescript-eslint/no-explicit-any` is **off** — prefer typed code anyway, treat `any` as a last resort.
+- TypeScript: `strict: true`, `strictNullChecks: true`, `noImplicitAny: false`, `baseUrl: ./` so imports look like `import { X } from 'src/<feature>/...'`.
+- Arrow functions over `function` declarations
+- **No comments in code** unless the WHY is non-obvious
+
+## Module shape
 
 ```
-AppModule
-├── PrismaModule (@Global) → PrismaService
-├── AuthModule → S2SAuthGuard (global APP_GUARD)
-├── HealthModule → GET /v1/health (@Public)
-└── PeopleModule
-    ├── PeopleController (/v1/people)
-    ├── PeopleService → raw SQL queries against partitioned Voter table
-    ├── SampleService → deterministic hash-bucket sampling
-    ├── StatsService → pre-computed district demographics from DistrictStats
-    └── DistrictModule → DistrictService
+src/<feature>/
+├── <feature>.module.ts
+├── <feature>.controller.ts        # HTTP only — no business logic
+├── services/<X>.service.ts        # extends createPrismaBase(MODELS.X) where applicable
+├── schemas/<X>.schema.ts          # Zod (createZodDto)
+├── utils/<X>.utils.ts             # pure helpers
+└── <feature>.schema.ts            # top-level DTO schema
 ```
 
-### API Endpoints (all under `/v1/people`)
+`src/people/` is the canonical reference (controller + multiple services + filter utils + Zod schemas + tests).
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/people` | List/filter voters with pagination |
-| POST | `/people/download` | Stream filtered voters as CSV |
-| GET/POST | `/people/sample` | Deterministic voter sampling for a district |
-| GET | `/people/stats` | Pre-computed district demographic stats |
-| GET | `/people/:id` | Single voter by ID |
+## PrismaBase pattern
 
-### Database & Prisma
+Services backed by a Prisma model **must** extend `createPrismaBase(MODELS.ModelName)` from `src/prisma/util/prisma.util.ts`. Provides `this.model`, `this.client`, `this.logger`, and bound passthroughs (`findMany`, `findFirst`, `findUnique`, `count`, etc.). **Never inject `PrismaService` directly into a new service.**
 
-Multi-file schema in `prisma/schema/` using `prismaSchemaFolder` and `multiSchema` preview features. Two PostgreSQL schemas: `public` (enums) and `green` (all tables).
+## Voter queries are raw SQL
 
-**Models:** Voter (100+ L2 columns, partitioned by state), District, DistrictVoter (join table), DistrictStats (pre-computed demographics with `buckets` JSON column).
+Almost all `Voter` queries go through `Prisma.sql` / `$queryRaw`, not Prisma ORM CRUD. The Voter table has 100+ L2 columns and partitioning by state — the ORM path is too coarse. Filter Zod → `transformFilters` → `buildVoterFiltersSql` → `Prisma.sql` WHERE clauses → execute. Output is normalized via `transformToPersonOutput` before leaving the service.
 
-**Critical pattern:** The Voter table is partitioned by state in the `green` schema. Nearly all voter queries use raw SQL via `Prisma.sql` / `$queryRaw` — not Prisma ORM CRUD methods. Prisma ORM methods are only used for District and DistrictStats lookups.
+`District` and `DistrictStats` use ORM methods — they're small lookup tables.
 
-### createPrismaBase Pattern
+See `docs/data-pipeline.md` for the full pipeline.
 
-All data-access services extend `createPrismaBase(MODELS.ModelName)` from `src/prisma/util/prisma.util.ts`. This factory provides passthrough methods (`findMany`, `findFirst`, `count`, etc.) plus `this.model` and `this.client` accessors. Never inject `PrismaService` directly into new services.
+## Auth
 
-### Filter Pipeline
-
-1. **Zod parsing** (`src/people/schemas/filters.schema.ts`) — validates and transforms raw filter input
-2. **transformFilters** (`src/people/schemas/filters.schema.utils.ts`) — converts to structured `FilterData` with filters, filterValues, filterOperators
-3. **buildVoterFiltersSql** (`src/people/utils/filters.sql.utils.ts`) — converts `FilterData` to `Prisma.Sql` WHERE clauses
-
-### Output Transformation
-
-Raw L2 field names/values are mapped to clean API output via `transformToPersonOutput` in `src/people/utils/transformToPersonOutput.utils.ts`. Mapper functions normalize gender, party, ethnicity, marital status, etc.
-
-### Authentication
-
-`S2SAuthGuard` (global) validates Bearer JWT signed with `PEOPLE_API_S2S_SECRET` (shared with gp-api). Use `@Public()` decorator to bypass auth. Dev env allows localhost bypass via `S2S_ALLOW_LOCALHOST=true`.
-
-### Global Setup (main.ts)
-
-- `ZodValidationPipe` — global validation via Zod schemas
-- `PrismaExceptionFilter` → `AllExceptionsFilter` — exception filter chain
-- `NewRelicInterceptor` — APM transaction names and slow-request events
-- Fastify plugins: `@fastify/helmet`, `@fastify/cors`, `@fastify/cookie`, `@fastify/static`
-- Global prefix: `/v1`
-- Custom `qs` parser for bracketed query params
+`S2SAuthGuard` is the global `APP_GUARD`. Validates Bearer JWTs signed with `PEOPLE_API_S2S_SECRET` (shared with gp-api). Use `@Public()` to bypass (currently only `/v1/health`). `S2S_ALLOW_LOCALHOST=true` in `.env` allows unauthenticated localhost requests for dev.
 
 ## Testing
 
-**Runner:** Vitest with SWC transpiler. Config in `vitest.config.ts`.
+- Framework: **Vitest 4** with SWC (NestJS decorator metadata requires SWC, not esbuild)
+- Test file pattern: `*.test.ts` (NOT `.spec.ts` — `nest-cli.json` has `spec: false`)
+- Pattern: `Test.createTestingModule` with `useValue`/`useClass` for DI; **fakes over mocks** — reach for `vi.fn()` only for callbacks/event handlers.
 
-**File naming:** `*.test.ts` (not `*.spec.ts`). `nest-cli.json` has `spec: false`.
+## Never
 
-**Patterns:**
-- Use `@nestjs/testing` `Test.createTestingModule` with `useValue`/`useClass` for DI
-- Fakes over mocks — `vi.fn()` only for callbacks/event handlers
-- Follow the rules in `ai-rules/`
-- When writing or modifying code, consider spawning a critic subagent:
-  ```
-  Read each .md file in ai-rules/. For each rule file relevant to my changes,
-  review the code I changed against those rules. For each violation, cite the
-  rule number, quote the offending code, and explain what to change.
-  ```
+- Never edit a file under `prisma/migrations/<timestamp>/` — applied migrations are immutable.
+- Never inject `PrismaService` directly into a new service — always extend `createPrismaBase(MODELS.X)`.
+- Never expose this API publicly. It is internal-only; no end-user-facing routes.
+- Never bypass `S2SAuthGuard` except via the `@Public()` decorator on health-check routes.
+- Never query the `Voter` table via Prisma ORM in new code — use `Prisma.sql` / `$queryRaw`.
+- Never disable `unused-imports/no-unused-imports` without an inline comment justifying it.
 
-## Code Style
+## Environment
 
-- **Formatting:** singleQuote, no semicolons, trailing commas (`"all"`)
-- **No comments in code**
-- ESLint: `no-explicit-any: off`, `unused-imports/no-unused-imports: error`
-- TypeScript: `strict: true`, `strictNullChecks: true`, `noImplicitAny: false`
-
-## Deploy
-
-SST v3 + Pulumi in `deploy/sst.config.ts`. Two stages: `develop` and `master`. ECS Fargate behind ALB. Secrets from AWS Secrets Manager (`PEOPLE_API_DEV` / `PEOPLE_API_PROD`). CI/CD: GitHub Actions triggers CodeBuild on push to develop/master.
-
-- Prod: `people-api.goodparty.org` (4GB, 1 vCPU, 2-16 tasks)
-- Dev: `people-api-dev.goodparty.org` (2GB, 0.5 vCPU, 1-4 tasks)
+- Node `v22.12` (`.nvmrc`)
+- npm
+- Postgres for local dev. The DB needs `green` and `public` schemas (`schemas = ["green", "public"]` in `prisma/schema/schema.prisma`); `npm run migrate:dev` creates them.
+- Required env vars: `DATABASE_URL`, `PEOPLE_API_S2S_SECRET`, `PORT` (code default 3000; `.env.example` sets 3002), `S2S_ALLOW_LOCALHOST` (dev only). See `.env.example`.
