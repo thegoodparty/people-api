@@ -117,8 +117,8 @@ export = async () => {
       prod: 'people-api.goodparty.org',
     }),
     certificateArn: select({
-      dev: 'arn:aws:acm:us-west-2:333022194791:certificate/71371e83-7e78-4079-a93f-0a341c0080dc',
-      prod: 'arn:aws:acm:us-west-2:333022194791:certificate/fb247fc9-b03e-42de-86af-f7de15e4ef46',
+      dev: `arn:aws:acm:us-west-2:${accountId}:certificate/71371e83-7e78-4079-a93f-0a341c0080dc`,
+      prod: `arn:aws:acm:us-west-2:${accountId}:certificate/fb247fc9-b03e-42de-86af-f7de15e4ef46`,
     }),
     secrets: Object.fromEntries(
       Object.keys(secret).map((key) => [

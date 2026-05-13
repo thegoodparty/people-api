@@ -11,7 +11,7 @@ permissions:
 
 env:
   AWS_REGION: us-west-2
-  IMAGE_URI: 333022194791.dkr.ecr.us-west-2.amazonaws.com/people-api:${{ github.sha }}
+  IMAGE_URI: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.us-west-2.amazonaws.com/people-api:${{ github.sha }}
 
 jobs:
   deploy:
@@ -28,7 +28,7 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v5
         with:
-          role-to-assume: arn:aws:iam::333022194791:role/github-actions-pulumi-deploy
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/github-actions-pulumi-deploy
           aws-region: us-west-2
 
       - name: Login to Amazon ECR
