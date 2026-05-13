@@ -16,7 +16,6 @@ export = async () => {
 
   const environment = config.require('environment') as 'dev' | 'prod'
   const imageUri = config.require('imageUri')
-  const accountId = config.require('accountId')
 
   const vpcId = 'vpc-0763fa52c32ebcf6a'
   const hostedZoneId = 'Z10392302OXMPNQLPO07K'
@@ -87,7 +86,7 @@ export = async () => {
     prod: ['tf-20250910223305753900000001', 'tf-20250910223305761900000002'],
   })
 
-  createRdsAdminRole({ environment, accountId })
+  createRdsAdminRole({ environment })
 
   for (let i = 0; i < rdsInstanceIds.length; i++) {
     new aws.rds.ClusterInstance(`rdsInstance-${i}`, {
@@ -117,8 +116,8 @@ export = async () => {
       prod: 'people-api.goodparty.org',
     }),
     certificateArn: select({
-      dev: `arn:aws:acm:us-west-2:${accountId}:certificate/71371e83-7e78-4079-a93f-0a341c0080dc`,
-      prod: `arn:aws:acm:us-west-2:${accountId}:certificate/fb247fc9-b03e-42de-86af-f7de15e4ef46`,
+      dev: 'arn:aws:acm:us-west-2:333022194791:certificate/71371e83-7e78-4079-a93f-0a341c0080dc',
+      prod: 'arn:aws:acm:us-west-2:333022194791:certificate/fb247fc9-b03e-42de-86af-f7de15e4ef46',
     }),
     secrets: Object.fromEntries(
       Object.keys(secret).map((key) => [
