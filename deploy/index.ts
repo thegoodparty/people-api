@@ -1,6 +1,9 @@
 import * as pulumi from '@pulumi/pulumi'
 import * as aws from '@pulumi/aws'
 import { createService } from './components/service'
+import { createRdsAdminRole } from './components/rds-admin-role'
+
+const ACCOUNT_ID = '333022194791'
 
 const extractDbCredentials = (dbUrl: string) => {
   const url = new URL(dbUrl)
@@ -84,6 +87,8 @@ export = async () => {
     dev: ['gp-people-db-dev-1'],
     prod: ['tf-20250910223305753900000001', 'tf-20250910223305761900000002'],
   })
+
+  createRdsAdminRole({ environment, accountId: ACCOUNT_ID })
 
   for (let i = 0; i < rdsInstanceIds.length; i++) {
     new aws.rds.ClusterInstance(`rdsInstance-${i}`, {
