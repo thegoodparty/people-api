@@ -12,9 +12,15 @@ const namedResources = [
 
 type Args = {
   environment: 'dev' | 'prod'
+  astroWorkspaceId: string
+  astroDeploymentId: string
 }
 
-export const createRdsAdminRole = ({ environment }: Args) => {
+export const createRdsAdminRole = ({
+  environment,
+  astroWorkspaceId,
+  astroDeploymentId,
+}: Args) => {
   const assumeRolePolicy = pulumi.jsonStringify({
     Version: '2012-10-17',
     Statement: [
@@ -27,10 +33,7 @@ export const createRdsAdminRole = ({ environment }: Args) => {
         Condition: {
           StringEquals: {
             'auth.astronomer.io:aud': 'sts.amazonaws.com',
-          },
-          StringLike: {
-            'auth.astronomer.io:sub':
-              'astro|TODO_WORKSPACE_ID|TODO_DEPLOYMENT_ID',
+            'auth.astronomer.io:sub': `astro|${astroWorkspaceId}|${astroDeploymentId}`,
           },
         },
       },
@@ -47,12 +50,13 @@ export const createRdsAdminRole = ({ environment }: Args) => {
         Resource: namedResources,
         Condition: {
           StringEquals: {
+            'aws:RequestTag/managedBy': 'dataplatform',
             'aws:RequestTag/Environment': environment,
           },
         },
       },
       {
-        Sid: 'RdsModifyAndDelete',
+        Sid: 'RdsModifyAndSuspend',
         Effect: 'Allow',
         Action: [
           'rds:AddRoleToDBCluster',
@@ -61,13 +65,15 @@ export const createRdsAdminRole = ({ environment }: Args) => {
           'rds:ModifyDBInstance',
           'rds:RebootDBCluster',
           'rds:RebootDBInstance',
-          'rds:DeleteDBCluster',
-          'rds:DeleteDBInstance',
-          'rds:DeleteDBClusterParameterGroup',
+          'rds:StopDBCluster',
+          'rds:StopDBInstance',
+          'rds:StartDBCluster',
+          'rds:StartDBInstance',
         ],
         Resource: namedResources,
         Condition: {
           StringEquals: {
+            'aws:ResourceTag/managedBy': 'dataplatform',
             'aws:ResourceTag/Environment': environment,
           },
         },

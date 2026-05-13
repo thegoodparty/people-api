@@ -17,6 +17,14 @@ export = async () => {
   const environment = config.require('environment') as 'dev' | 'prod'
   const imageUri = config.require('imageUri')
 
+  const astroWorkspaceId = process.env.ASTRO_WORKSPACE_ID
+  const astroDeploymentId = process.env.ASTRO_DEPLOYMENT_ID
+  if (!astroWorkspaceId || !astroDeploymentId) {
+    throw new Error(
+      'ASTRO_WORKSPACE_ID and ASTRO_DEPLOYMENT_ID env vars must be set',
+    )
+  }
+
   const vpcId = 'vpc-0763fa52c32ebcf6a'
   const hostedZoneId = 'Z10392302OXMPNQLPO07K'
   const vpcSubnetIds = {
@@ -86,7 +94,11 @@ export = async () => {
     prod: ['tf-20250910223305753900000001', 'tf-20250910223305761900000002'],
   })
 
-  createRdsAdminRole({ environment })
+  createRdsAdminRole({
+    environment,
+    astroWorkspaceId,
+    astroDeploymentId,
+  })
 
   for (let i = 0; i < rdsInstanceIds.length; i++) {
     new aws.rds.ClusterInstance(`rdsInstance-${i}`, {

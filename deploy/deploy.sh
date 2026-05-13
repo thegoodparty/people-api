@@ -12,6 +12,16 @@ if [ -z "$IMAGE_URI" ]; then
   exit 1
 fi
 
+if [ -z "$ASTRO_WORKSPACE_ID" ]; then
+  echo "Error: ASTRO_WORKSPACE_ID is not set"
+  exit 1
+fi
+
+if [ -z "$ASTRO_DEPLOYMENT_ID" ]; then
+  echo "Error: ASTRO_DEPLOYMENT_ID is not set"
+  exit 1
+fi
+
 PULUMI_CONFIG_PASSPHRASE=$(aws ssm get-parameter \
   --name "pulumi-state-config-passphrase" \
   --with-decryption \

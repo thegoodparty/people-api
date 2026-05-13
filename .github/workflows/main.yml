@@ -50,12 +50,21 @@ jobs:
         id: context
         run: |
           case "${{ github.ref_name }}" in
-            develop) echo "environment=dev" >> "$GITHUB_OUTPUT" ;;
-            master) echo "environment=prod" >> "$GITHUB_OUTPUT" ;;
+            develop)
+              echo "environment=dev" >> "$GITHUB_OUTPUT"
+              echo "astro_deployment_id=${{ vars.ASTRO_DEPLOYMENT_ID_DEV }}" >> "$GITHUB_OUTPUT"
+              ;;
+            master)
+              echo "environment=prod" >> "$GITHUB_OUTPUT"
+              echo "astro_deployment_id=${{ vars.ASTRO_DEPLOYMENT_ID_PROD }}" >> "$GITHUB_OUTPUT"
+              ;;
           esac
 
       - name: Deploy
         working-directory: deploy
+        env:
+          ASTRO_WORKSPACE_ID: ${{ vars.ASTRO_WORKSPACE_ID }}
+          ASTRO_DEPLOYMENT_ID: ${{ steps.context.outputs.astro_deployment_id }}
         run: ./deploy.sh ${{ steps.context.outputs.environment }}
 
       - name: Notify Slack on Success
