@@ -12,6 +12,11 @@ if [ -z "$IMAGE_URI" ]; then
   exit 1
 fi
 
+if [ -z "$AWS_ACCOUNT_ID" ]; then
+  echo "Error: AWS_ACCOUNT_ID is not set"
+  exit 1
+fi
+
 PULUMI_CONFIG_PASSPHRASE=$(aws ssm get-parameter \
   --name "pulumi-state-config-passphrase" \
   --with-decryption \
@@ -30,6 +35,7 @@ pulumi stack select "organization/people-api/people-api-$env" --create
 pulumi config set aws:region "$AWS_REGION"
 pulumi config set environment "$env"
 pulumi config set imageUri "$IMAGE_URI"
+pulumi config set accountId "$AWS_ACCOUNT_ID"
 pulumi config set --path aws:defaultTags.tags.Environment "$env"
 pulumi config set --path aws:defaultTags.tags.Project people-api
 
