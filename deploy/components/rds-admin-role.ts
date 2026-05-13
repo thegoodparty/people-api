@@ -5,9 +5,9 @@ const ACCOUNT_ID = '333022194791'
 const REGION = 'us-west-2'
 
 const namedResources = [
-  `arn:aws:rds:${REGION}:${ACCOUNT_ID}:cluster:gp-*-db-20*`,
-  `arn:aws:rds:${REGION}:${ACCOUNT_ID}:db:gp-*-db-20*`,
-  `arn:aws:rds:${REGION}:${ACCOUNT_ID}:cluster-pg:gp-*-db-20*`,
+  `arn:aws:rds:${REGION}:${ACCOUNT_ID}:cluster:gp-people-db-20*`,
+  `arn:aws:rds:${REGION}:${ACCOUNT_ID}:db:gp-people-db-20*`,
+  `arn:aws:rds:${REGION}:${ACCOUNT_ID}:cluster-pg:gp-people-db-20*`,
 ]
 
 type Args = {
