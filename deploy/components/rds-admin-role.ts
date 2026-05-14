@@ -4,6 +4,15 @@ import * as aws from '@pulumi/aws'
 const ACCOUNT_ID = '333022194791'
 const REGION = 'us-west-2'
 
+// Astronomer-managed workload-identity roles, one per Astro deployment.
+// Airflow pods already assume these via IRSA on Astronomer's EKS cluster;
+// we trust them here so DAGs can chain into our account via sts:AssumeRole.
+// Find these in the Astro UI under Deployment > Details > Workload Identity.
+const ASTRO_WORKLOAD_IDENTITY = {
+  dev: 'arn:aws:iam::111928029897:role/astro-galactian-element-5125',
+  prod: 'arn:aws:iam::111928029897:role/TODO-PROD-WORKLOAD-IDENTITY',
+}
+
 const namedResources = [
   `arn:aws:rds:${REGION}:${ACCOUNT_ID}:cluster:gp-people-db-20*`,
   `arn:aws:rds:${REGION}:${ACCOUNT_ID}:db:gp-people-db-20*`,
@@ -12,28 +21,22 @@ const namedResources = [
 
 type Args = {
   environment: 'dev' | 'prod'
-  astroWorkspaceId: string
-  astroDeploymentId: string
+  externalId: string
 }
 
-export const createRdsAdminRole = ({
-  environment,
-  astroWorkspaceId,
-  astroDeploymentId,
-}: Args) => {
+export const createRdsAdminRole = ({ environment, externalId }: Args) => {
   const assumeRolePolicy = pulumi.jsonStringify({
     Version: '2012-10-17',
     Statement: [
       {
         Effect: 'Allow',
         Principal: {
-          Federated: `arn:aws:iam::${ACCOUNT_ID}:oidc-provider/auth.astronomer.io/`,
+          AWS: ASTRO_WORKLOAD_IDENTITY[environment],
         },
-        Action: 'sts:AssumeRoleWithWebIdentity',
+        Action: 'sts:AssumeRole',
         Condition: {
           StringEquals: {
-            'auth.astronomer.io:aud': 'sts.amazonaws.com',
-            'auth.astronomer.io:sub': `astro|${astroWorkspaceId}|${astroDeploymentId}`,
+            'sts:ExternalId': externalId,
           },
         },
       },
