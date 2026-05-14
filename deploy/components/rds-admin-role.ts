@@ -10,7 +10,7 @@ const REGION = 'us-west-2'
 // Find these in the Astro UI under Deployment > Details > Workload Identity.
 const ASTRO_WORKLOAD_IDENTITY = {
   dev: 'arn:aws:iam::111928029897:role/astro-galactian-element-5125',
-  prod: 'arn:aws:iam::111928029897:role/TODO-PROD-WORKLOAD-IDENTITY',
+  prod: 'arn:aws:iam::111928029897:role/astro-exothermic-astronaut-9119',
 }
 
 const namedResources = [
