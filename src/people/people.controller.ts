@@ -8,6 +8,7 @@ import {
   StatsDTO,
 } from './people.schema'
 import { PeopleService } from './services/people.service'
+import { PeopleDownloadService } from './services/peopleDownload.service'
 import { StatsService } from './services/stats.service'
 import { FastifyReply } from 'fastify'
 
@@ -15,6 +16,7 @@ import { FastifyReply } from 'fastify'
 export class PeopleController {
   constructor(
     private readonly peopleService: PeopleService,
+    private readonly peopleDownloadService: PeopleDownloadService,
     private readonly statsService: StatsService,
   ) {}
 
@@ -30,7 +32,7 @@ export class PeopleController {
   ) {
     res.header('Content-Type', 'text/csv')
     res.header('Content-Disposition', 'attachment; filename="people.csv"')
-    await this.peopleService.streamPeopleCsv(dto, res)
+    await this.peopleDownloadService.streamPeopleCsv(dto, res)
   }
 
   @Get('stats')
