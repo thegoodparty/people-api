@@ -57,7 +57,7 @@ jobs:
       - name: Deploy
         working-directory: deploy
         env:
-          ASTRO_ASSUME_ROLE_EXTERNAL_ID: ${{ steps.context.outputs.environment == 'prod' && secrets.ASTRO_ASSUME_ROLE_EXTERNAL_ID_PROD || secrets.ASTRO_ASSUME_ROLE_EXTERNAL_ID_DEV }}
+          ASTRO_ASSUME_ROLE_EXTERNAL_ID: ${{ steps.context.outputs.environment == 'prod' && vars.ASTRO_ASSUME_ROLE_EXTERNAL_ID_PROD || vars.ASTRO_ASSUME_ROLE_EXTERNAL_ID_DEV }}
         run: ./deploy.sh ${{ steps.context.outputs.environment }}
 
       - name: Notify Slack on Success
