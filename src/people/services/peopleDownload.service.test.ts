@@ -75,7 +75,15 @@ describe('PeopleDownloadService', () => {
     districtServiceMock.findDistrictById.mockResolvedValue(cityWardDistrict)
 
     copyStream = new PassThrough()
-    mockClientQuery.mockReturnValue(copyStream)
+    // The service issues a plain `SET statement_timeout = 0` before the COPY
+    // and then the COPY itself. The plain SET resolves as a regular pg query
+    // result; the COPY call returns a Readable stream via pg-copy-streams.
+    mockClientQuery.mockImplementation((arg: unknown) => {
+      if (typeof arg === 'string' && arg.startsWith('SET ')) {
+        return Promise.resolve({ rows: [], rowCount: 0 })
+      }
+      return copyStream
+    })
     setupClient()
 
     service = new PeopleDownloadService(districtServiceMock as never)
@@ -265,6 +273,50 @@ describe('PeopleDownloadService', () => {
           res,
         ),
       ).rejects.toMatchObject({ status: 500 })
+    })
+
+    it('disables statement_timeout for the COPY session before issuing the COPY', async () => {
+      const res = makeRawResponse()
+      const completion = service.streamPeopleCsv(
+        {
+          districtId: DISTRICT_UUID,
+          filters: { filters: [], filterOperators: {} },
+        } as never,
+        res,
+      )
+
+      copyStream.end()
+      await completion
+
+      const queries = mockClientQuery.mock.calls.map((call) => call[0])
+      const setIdx = queries.findIndex(
+        (q) => typeof q === 'string' && q.includes('statement_timeout'),
+      )
+      const copyIdx = queries.findIndex(
+        (q) => typeof q === 'string' && q.startsWith('COPY ('),
+      )
+      expect(setIdx).toBeGreaterThanOrEqual(0)
+      expect(copyIdx).toBeGreaterThan(setIdx)
+      expect(queries[setIdx]).toBe('SET statement_timeout = 0')
+    })
+
+    it('releases the pg client and throws when the SET statement_timeout query fails', async () => {
+      mockClientQuery.mockImplementationOnce(() =>
+        Promise.reject(new Error('boom')),
+      )
+
+      const res = makeRawResponse()
+
+      await expect(
+        service.streamPeopleCsv(
+          {
+            districtId: DISTRICT_UUID,
+            filters: { filters: [], filterOperators: {} },
+          } as never,
+          res,
+        ),
+      ).rejects.toMatchObject({ status: 500 })
+      expect(mockRelease).toHaveBeenCalledTimes(1)
     })
   })
 

@@ -69,7 +69,7 @@ export class PeopleDownloadService implements OnModuleDestroy {
     // mode. People-api currently connects directly to Aurora Postgres (see
     // `deploy/index.ts`), which is session-mode. If a transaction-mode pooler
     // is ever introduced in front of the DB, this service must bypass it.
-    this.pool = new Pool({ connectionString: databaseUrl, max: 5 })
+    this.pool = new Pool({ connectionString: databaseUrl, max: 10 })
   }
 
   async onModuleDestroy() {
@@ -89,6 +89,19 @@ export class PeopleDownloadService implements OnModuleDestroy {
       client = await this.pool.connect()
     } catch (err) {
       this.logger.error({ err }, 'Failed to acquire pg client for COPY')
+      throw new InternalServerErrorException('Failed to start download')
+    }
+
+    // A 1M-row COPY can run for minutes. Disable any inherited
+    // `statement_timeout` for this session so the export is not killed
+    // mid-stream by a cluster default. Pool clients can be reused, so a
+    // future caller may inherit the relaxed value — every subsequent COPY
+    // also sets it explicitly, and no non-COPY path uses this pool.
+    try {
+      await client.query('SET statement_timeout = 0')
+    } catch (err) {
+      client.release()
+      this.logger.error({ err }, 'Failed to disable statement_timeout for COPY')
       throw new InternalServerErrorException('Failed to start download')
     }
 
