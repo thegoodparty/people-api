@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common'
 import { PassThrough } from 'stream'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PeopleDownloadService } from './peopleDownload.service'
@@ -53,15 +54,27 @@ const setupClient = () => {
   return client
 }
 
-const makeRawResponse = () => {
-  const raw = new PassThrough() as unknown as PassThrough & {
-    statusCode?: number
-    headersSent?: boolean
-  }
+type MockRaw = PassThrough & {
+  statusCode?: number
+  headersSent: boolean
+  flushHeaders: ReturnType<typeof vi.fn>
+  setHeader: ReturnType<typeof vi.fn>
+}
+
+type MockReply = Parameters<PeopleDownloadService['streamPeopleCsv']>[1]
+
+const makeRawResponse = (): { res: MockReply; raw: MockRaw } => {
+  const raw = new PassThrough() as unknown as MockRaw
   raw.headersSent = false
-  return { raw } as unknown as Parameters<
-    PeopleDownloadService['streamPeopleCsv']
-  >[1]
+  // Real Node ServerResponse exposes `flushHeaders` and `setHeader`. The
+  // download service uses both to commit headers to the wire before COPY
+  // produces any rows.
+  raw.flushHeaders = vi.fn(() => {
+    raw.headersSent = true
+  })
+  raw.setHeader = vi.fn()
+  const res = { raw } as unknown as MockReply
+  return { res, raw }
 }
 
 describe('PeopleDownloadService', () => {
@@ -97,7 +110,7 @@ describe('PeopleDownloadService', () => {
     it('builds COPY SQL with the voter join, where clause, and election constants', async () => {
       const { to: copyTo } = await import('pg-copy-streams')
 
-      const res = makeRawResponse()
+      const { res, raw } = makeRawResponse()
       const completion = service.streamPeopleCsv(
         {
           districtId: DISTRICT_UUID,
@@ -107,7 +120,7 @@ describe('PeopleDownloadService', () => {
       )
 
       copyStream.end()
-      ;(res as never as { raw: PassThrough }).raw.destroy()
+      raw.destroy()
 
       await completion
 
@@ -129,7 +142,7 @@ describe('PeopleDownloadService', () => {
       const { to: copyTo } = await import('pg-copy-streams')
       districtServiceMock.findDistrictById.mockResolvedValue(stateDistrict)
 
-      const res = makeRawResponse()
+      const { res, raw } = makeRawResponse()
       const completion = service.streamPeopleCsv(
         {
           districtId: stateDistrict.id,
@@ -139,7 +152,7 @@ describe('PeopleDownloadService', () => {
       )
 
       copyStream.end()
-      ;(res as never as { raw: PassThrough }).raw.destroy()
+      raw.destroy()
 
       await completion
 
@@ -154,7 +167,7 @@ describe('PeopleDownloadService', () => {
     it('inlines filter predicates into the COPY SQL', async () => {
       const { to: copyTo } = await import('pg-copy-streams')
 
-      const res = makeRawResponse()
+      const { res, raw } = makeRawResponse()
       const completion = service.streamPeopleCsv(
         {
           districtId: DISTRICT_UUID,
@@ -170,7 +183,7 @@ describe('PeopleDownloadService', () => {
       )
 
       copyStream.end()
-      ;(res as never as { raw: PassThrough }).raw.destroy()
+      raw.destroy()
 
       await completion
 
@@ -183,8 +196,7 @@ describe('PeopleDownloadService', () => {
     })
 
     it('pipes COPY stream output into res.raw', async () => {
-      const res = makeRawResponse()
-      const raw = (res as never as { raw: PassThrough }).raw
+      const { res, raw } = makeRawResponse()
       const chunks: Buffer[] = []
       raw.on('data', (chunk) => chunks.push(Buffer.from(chunk)))
 
@@ -208,7 +220,7 @@ describe('PeopleDownloadService', () => {
     })
 
     it('releases the pg client when the COPY stream ends', async () => {
-      const res = makeRawResponse()
+      const { res } = makeRawResponse()
       const completion = service.streamPeopleCsv(
         {
           districtId: DISTRICT_UUID,
@@ -224,8 +236,7 @@ describe('PeopleDownloadService', () => {
     })
 
     it('releases the pg client and propagates an error on COPY failure', async () => {
-      const res = makeRawResponse()
-      const raw = (res as never as { raw: PassThrough }).raw
+      const { res, raw } = makeRawResponse()
       const completion = service.streamPeopleCsv(
         {
           districtId: DISTRICT_UUID,
@@ -242,8 +253,7 @@ describe('PeopleDownloadService', () => {
     })
 
     it('destroys the COPY stream when the client aborts (res.raw close)', async () => {
-      const res = makeRawResponse()
-      const raw = (res as never as { raw: PassThrough }).raw
+      const { res, raw } = makeRawResponse()
       const completion = service.streamPeopleCsv(
         {
           districtId: DISTRICT_UUID,
@@ -262,7 +272,7 @@ describe('PeopleDownloadService', () => {
     it('throws InternalServerErrorException when the pool cannot connect', async () => {
       mockPoolConnect.mockRejectedValueOnce(new Error('pool exhausted'))
 
-      const res = makeRawResponse()
+      const { res } = makeRawResponse()
 
       await expect(
         service.streamPeopleCsv(
@@ -276,7 +286,7 @@ describe('PeopleDownloadService', () => {
     })
 
     it('disables statement_timeout for the COPY session before issuing the COPY', async () => {
-      const res = makeRawResponse()
+      const { res } = makeRawResponse()
       const completion = service.streamPeopleCsv(
         {
           districtId: DISTRICT_UUID,
@@ -300,12 +310,116 @@ describe('PeopleDownloadService', () => {
       expect(queries[setIdx]).toBe('SET statement_timeout = 0')
     })
 
+    it('flushes response headers after pool.connect + SET + COPY init, with download headers set first', async () => {
+      const { to: copyTo } = await import('pg-copy-streams')
+
+      const { res, raw } = makeRawResponse()
+
+      const callOrder: string[] = []
+      mockPoolConnect.mockImplementationOnce(async () => {
+        callOrder.push('connect')
+        return {
+          query: mockClientQuery,
+          release: mockRelease,
+          escapeLiteral: escapeLiteralMock,
+        }
+      })
+      mockClientQuery.mockImplementation((arg: unknown) => {
+        if (typeof arg === 'string' && arg.startsWith('SET ')) {
+          callOrder.push('set-timeout')
+          return Promise.resolve({ rows: [], rowCount: 0 })
+        }
+        callOrder.push('copy')
+        return copyStream
+      })
+      raw.setHeader.mockImplementation((name: string) => {
+        callOrder.push(`set-header:${name}`)
+      })
+      raw.flushHeaders.mockImplementationOnce(() => {
+        callOrder.push('flush-headers')
+      })
+
+      const completion = service.streamPeopleCsv(
+        {
+          districtId: DISTRICT_UUID,
+          filters: { filters: [], filterOperators: {} },
+        } as never,
+        res,
+      )
+
+      copyStream.end()
+      await completion
+
+      expect(raw.flushHeaders).toHaveBeenCalledTimes(1)
+      // Required ordering: connect → SET → COPY init → set the download
+      // headers → flush. Headers must land on the wire after we know the
+      // COPY stream is alive, so any earlier failure surfaces as a
+      // structured 5xx instead of a corrupted "attachment" response.
+      const connectIdx = callOrder.indexOf('connect')
+      const setIdx = callOrder.indexOf('set-timeout')
+      const copyIdx = callOrder.indexOf('copy')
+      const contentTypeIdx = callOrder.indexOf('set-header:Content-Type')
+      const dispositionIdx = callOrder.indexOf('set-header:Content-Disposition')
+      const flushIdx = callOrder.indexOf('flush-headers')
+      expect(connectIdx).toBeGreaterThanOrEqual(0)
+      expect(setIdx).toBeGreaterThan(connectIdx)
+      expect(copyIdx).toBeGreaterThan(setIdx)
+      expect(contentTypeIdx).toBeGreaterThan(copyIdx)
+      expect(dispositionIdx).toBeGreaterThan(copyIdx)
+      expect(flushIdx).toBeGreaterThan(contentTypeIdx)
+      expect(flushIdx).toBeGreaterThan(dispositionIdx)
+      expect(vi.mocked(copyTo)).toHaveBeenCalledTimes(1)
+      expect(raw.setHeader).toHaveBeenCalledWith('Content-Type', 'text/csv')
+      expect(raw.setHeader).toHaveBeenCalledWith(
+        'Content-Disposition',
+        'attachment; filename="people.csv"',
+      )
+    })
+
+    it('does not flush response headers when pool.connect fails', async () => {
+      mockPoolConnect.mockRejectedValueOnce(new Error('pool exhausted'))
+
+      const { res, raw } = makeRawResponse()
+
+      await expect(
+        service.streamPeopleCsv(
+          {
+            districtId: DISTRICT_UUID,
+            filters: { filters: [], filterOperators: {} },
+          } as never,
+          res,
+        ),
+      ).rejects.toMatchObject({ status: 500 })
+
+      expect(raw.flushHeaders).not.toHaveBeenCalled()
+    })
+
+    it('does not flush response headers when SET statement_timeout fails', async () => {
+      mockClientQuery.mockImplementationOnce(() =>
+        Promise.reject(new Error('boom')),
+      )
+
+      const { res, raw } = makeRawResponse()
+
+      await expect(
+        service.streamPeopleCsv(
+          {
+            districtId: DISTRICT_UUID,
+            filters: { filters: [], filterOperators: {} },
+          } as never,
+          res,
+        ),
+      ).rejects.toMatchObject({ status: 500 })
+
+      expect(raw.flushHeaders).not.toHaveBeenCalled()
+    })
+
     it('releases the pg client and throws when the SET statement_timeout query fails', async () => {
       mockClientQuery.mockImplementationOnce(() =>
         Promise.reject(new Error('boom')),
       )
 
-      const res = makeRawResponse()
+      const { res } = makeRawResponse()
 
       await expect(
         service.streamPeopleCsv(
@@ -317,6 +431,86 @@ describe('PeopleDownloadService', () => {
         ),
       ).rejects.toMatchObject({ status: 500 })
       expect(mockRelease).toHaveBeenCalledTimes(1)
+    })
+
+    it('releases the pg client and throws 500 when COPY init fails synchronously, before any header flush', async () => {
+      // SET statement_timeout succeeds; the COPY query construction throws
+      // synchronously. Without the try/catch around `client.query(copyTo)`
+      // this would leak a pool client and we would have already flushed
+      // response headers by the time the failure surfaced.
+      mockClientQuery.mockImplementation((arg: unknown) => {
+        if (typeof arg === 'string' && arg.startsWith('SET ')) {
+          return Promise.resolve({ rows: [], rowCount: 0 })
+        }
+        throw new Error('copy init blew up')
+      })
+
+      const { res, raw } = makeRawResponse()
+
+      await expect(
+        service.streamPeopleCsv(
+          {
+            districtId: DISTRICT_UUID,
+            filters: { filters: [], filterOperators: {} },
+          } as never,
+          res,
+        ),
+      ).rejects.toMatchObject({ status: 500 })
+
+      expect(mockRelease).toHaveBeenCalledTimes(1)
+      expect(raw.flushHeaders).not.toHaveBeenCalled()
+      expect(raw.setHeader).not.toHaveBeenCalledWith(
+        'Content-Disposition',
+        expect.anything(),
+      )
+    })
+  })
+
+  describe('onApplicationBootstrap', () => {
+    it('pre-warms the pg pool by acquiring and releasing a connection', async () => {
+      mockPoolConnect.mockClear()
+      mockRelease.mockClear()
+
+      service.onApplicationBootstrap()
+
+      // Pre-warm is fire-and-forget; flush microtasks so the .then() runs.
+      await new Promise((resolve) => setImmediate(resolve))
+
+      expect(mockPoolConnect).toHaveBeenCalledTimes(1)
+      expect(mockRelease).toHaveBeenCalledTimes(1)
+    })
+
+    it('swallows pre-warm errors so bootstrap does not crash the app, logging a warning', async () => {
+      mockPoolConnect.mockClear()
+      mockPoolConnect.mockRejectedValueOnce(new Error('cold pool'))
+
+      // Spy on the Nest Logger prototype so we can assert the swallow was
+      // surfaced as a structured warning rather than just silently dropped.
+      const warnSpy = vi
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => {})
+
+      // Track unhandledRejection too — if the catch is ever lost, the
+      // promise rejection would propagate up and we'd fail loudly.
+      const unhandled: unknown[] = []
+      const onUnhandled = (err: unknown) => unhandled.push(err)
+      process.on('unhandledRejection', onUnhandled)
+
+      try {
+        service.onApplicationBootstrap()
+
+        await new Promise((resolve) => setImmediate(resolve))
+
+        expect(mockPoolConnect).toHaveBeenCalledTimes(1)
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ err: expect.any(Error) }),
+          'Pre-warm of pg pool failed',
+        )
+        expect(unhandled).toEqual([])
+      } finally {
+        process.off('unhandledRejection', onUnhandled)
+        warnSpy.mockRestore()
+      }
     })
   })
 

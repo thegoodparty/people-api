@@ -2,11 +2,12 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  OnApplicationBootstrap,
   OnModuleDestroy,
 } from '@nestjs/common'
 import type { FastifyReply } from 'fastify'
 import { Pool, PoolClient } from 'pg'
-import { to as copyTo } from 'pg-copy-streams'
+import { CopyToStreamQuery, to as copyTo } from 'pg-copy-streams'
 import { DistrictService } from 'src/district/services/district.service'
 import { DownloadPeopleDTO } from '../people.schema'
 import { buildVoterSelectSql, ExtraSelectedField } from '../people.select'
@@ -52,7 +53,9 @@ const EXTRA_FIELDS: ExtraSelectedField[] = [
 const quoteIdent = (id: string) => `"${id.replace(/"/g, '""')}"`
 
 @Injectable()
-export class PeopleDownloadService implements OnModuleDestroy {
+export class PeopleDownloadService
+  implements OnApplicationBootstrap, OnModuleDestroy
+{
   private readonly logger = new Logger(PeopleDownloadService.name)
   private readonly pool: Pool
 
@@ -70,6 +73,22 @@ export class PeopleDownloadService implements OnModuleDestroy {
     // `deploy/index.ts`), which is session-mode. If a transaction-mode pooler
     // is ever introduced in front of the DB, this service must bypass it.
     this.pool = new Pool({ connectionString: databaseUrl, max: 10 })
+  }
+
+  onApplicationBootstrap() {
+    // Pay the cold-connect cost up front so the first user-initiated download
+    // after a deploy / idle period doesn't include 200-500ms of pg handshake
+    // in its TTFB. Fire-and-forget; if it fails the next real request will
+    // retry and surface the error normally. Runs only when Nest finishes
+    // bootstrapping, so unit tests that instantiate the service directly do
+    // not pay this cost or pollute pool-call assertions.
+    this.pool
+      .connect()
+      .then((client) => client.release())
+      .catch((err: unknown) => {
+        const error = err instanceof Error ? err : new Error(String(err))
+        this.logger.warn({ err: error }, 'Pre-warm of pg pool failed')
+      })
   }
 
   async onModuleDestroy() {
@@ -105,16 +124,45 @@ export class PeopleDownloadService implements OnModuleDestroy {
       throw new InternalServerErrorException('Failed to start download')
     }
 
-    const sql = this.buildCopySql({
-      client,
-      effectiveDistrictId,
-      state,
-      filters: dto.filters,
-      districtName,
-      districtType,
-    })
+    // Build the COPY SQL and start the stream BEFORE committing response
+    // headers. A synchronous failure here (bad filter shape, COPY init
+    // rejected) must release the pool client and surface a structured 5xx
+    // — once headers are flushed the connection becomes a binary download
+    // and we can no longer deliver a JSON error.
+    let copyStream: CopyToStreamQuery
+    try {
+      const sql = this.buildCopySql({
+        client,
+        effectiveDistrictId,
+        state,
+        filters: dto.filters,
+        districtName,
+        districtType,
+      })
+      copyStream = client.query(copyTo(sql))
+    } catch (err) {
+      client.release()
+      this.logger.error({ err }, 'Failed to start COPY query')
+      throw new InternalServerErrorException('Failed to start download')
+    }
 
-    const copyStream = client.query(copyTo(sql))
+    // Commit the response headers to the wire now. Postgres can take many
+    // seconds to plan + return the first batch of a large COPY, and Fastify
+    // would otherwise hold our headers until the first body chunk is
+    // written. Flushing here lets the browser display its native download
+    // notification and lets gp-api forward its `Set-Cookie` handshake to the
+    // client before COPY starts producing bytes. After this point we can no
+    // longer return a structured error; the `copyStream.on('error', ...)`
+    // handler below destroys the socket on failure, which is the correct
+    // behavior for an in-flight streaming response.
+    res.raw.setHeader('Content-Type', 'text/csv')
+    res.raw.setHeader(
+      'Content-Disposition',
+      'attachment; filename="people.csv"',
+    )
+    if (!res.raw.headersSent) {
+      res.raw.flushHeaders()
+    }
 
     let released = false
     const release = () => {

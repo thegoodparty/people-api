@@ -30,8 +30,11 @@ export class PeopleController {
     @Body() dto: DownloadPeopleDTO,
     @Res() res: FastifyReply,
   ) {
-    res.header('Content-Type', 'text/csv')
-    res.header('Content-Disposition', 'attachment; filename="people.csv"')
+    // Headers (Content-Type, Content-Disposition) are set inside
+    // `streamPeopleCsv` only after the pg connection is acquired and the
+    // COPY stream is constructed, so any earlier failure can still surface
+    // as a structured 4xx/5xx instead of an `attachment; filename` header
+    // committing the response to a broken download.
     await this.peopleDownloadService.streamPeopleCsv(dto, res)
   }
 
