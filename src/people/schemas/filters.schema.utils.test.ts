@@ -184,7 +184,9 @@ describe('transformFilters', () => {
 
       const result = transformFilters(filters, mockSchemaShape)
 
-      expect(result.filterOperators.estimatedIncomeAmountInt.operator).toBe('is')
+      expect(result.filterOperators.estimatedIncomeAmountInt.operator).toBe(
+        'is',
+      )
       expect(result.filterOperators.estimatedIncomeAmountInt.value).toBe('null')
     })
 

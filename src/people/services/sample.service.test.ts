@@ -133,7 +133,10 @@ describe('SampleService', () => {
   it('retries with a new seed when first sample is underfilled', async () => {
     wireTransactionResults([
       [{ id: 'person-a', State: 'WY' }],
-      [{ id: 'person-a', State: 'WY' }, { id: 'person-b', State: 'WY' }],
+      [
+        { id: 'person-a', State: 'WY' },
+        { id: 'person-b', State: 'WY' },
+      ],
     ])
 
     const result = await service.samplePeople({

@@ -33,7 +33,6 @@
     "schema": "prisma/schema"
   },
   "dependencies": {
-    "@fast-csv/format": "^5.0.5",
     "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^11.0.0",
     "@fastify/helmet": "^13.0.1",
@@ -66,6 +65,8 @@
     "murmurhash": "^2.0.1",
     "nestjs-pino": "^4.4.1",
     "nestjs-zod": "^4.3.1",
+    "pg": "^8.20.0",
+    "pg-copy-streams": "^6.0.6",
     "pino-http": "^10.5.0",
     "prisma": "^6.4.1",
     "prisma-json-types-generator": "^3.6.2",
@@ -87,6 +88,8 @@
     "@types/jsonwebtoken": "^9.0.6",
     "@types/lodash": "^4.17.16",
     "@types/node": "^22.13.9",
+    "@types/pg": "^8.20.0",
+    "@types/pg-copy-streams": "^1.2.5",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "eslint": "^8.0.0",
