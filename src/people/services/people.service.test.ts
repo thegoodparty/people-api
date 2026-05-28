@@ -1,5 +1,4 @@
 import { NotFoundException } from '@nestjs/common'
-import { PassThrough } from 'stream'
 import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { PeopleService } from './people.service'
 
@@ -202,7 +201,9 @@ describe('PeopleService', () => {
 
   describe('findPerson', () => {
     it('returns person for district path', async () => {
-      mockClient.$queryRaw.mockResolvedValueOnce([makeDbPerson({ id: 'person-ok' })])
+      mockClient.$queryRaw.mockResolvedValueOnce([
+        makeDbPerson({ id: 'person-ok' }),
+      ])
 
       const person = await service.findPerson('person-ok', {
         districtId: '0e5bafca-93a9-86a5-2522-f373979720df',
@@ -236,53 +237,9 @@ describe('PeopleService', () => {
         service.findPerson('person-1', {
           districtId: 'district-wy',
         } as never),
-      ).rejects.toThrow(new NotFoundException('Person with ID person-1 not found'))
-    })
-  })
-
-  describe('streamPeopleCsv', () => {
-    it('streams csv with headers, data rows, and election fields', async () => {
-      mockClient.$queryRaw
-        .mockResolvedValueOnce([makeDbPerson({ id: 'stream-1' })])
-        .mockResolvedValueOnce([])
-
-      const raw = new PassThrough()
-      const chunks: Buffer[] = []
-      raw.on('data', (chunk) => {
-        chunks.push(Buffer.from(chunk))
-      })
-      const ended = new Promise<void>((resolve) => raw.on('end', () => resolve()))
-
-      await service.streamPeopleCsv(
-        {
-          districtId: '0e5bafca-93a9-86a5-2522-f373979720df',
-          filters: { filters: [], filterOperators: {} },
-        } as never,
-        {
-          raw,
-        } as never,
+      ).rejects.toThrow(
+        new NotFoundException('Person with ID person-1 not found'),
       )
-
-      await ended
-      const csv = Buffer.concat(chunks).toString('utf-8')
-      const lines = csv
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
-      const header = lines[0].split(',')
-      const data = lines[1].split(',')
-      const electionLocationIdx = header.indexOf('electionLocation')
-      const electionTypeIdx = header.indexOf('electionType')
-      const unquote = (v: string) => v.replace(/^"(.*)"$/, '$1')
-
-      expect(csv).toContain('electionLocation,electionType')
-      expect(csv).toContain('stream-1')
-      expect(csv).toContain('City_Ward')
-      expect(csv).toContain('CHEYENNE CITY WARD 1')
-      expect(electionLocationIdx).toBeGreaterThan(-1)
-      expect(electionTypeIdx).toBeGreaterThan(-1)
-      expect(unquote(data[electionLocationIdx])).toBe('CHEYENNE CITY WARD 1')
-      expect(unquote(data[electionTypeIdx])).toBe('City_Ward')
     })
   })
 })

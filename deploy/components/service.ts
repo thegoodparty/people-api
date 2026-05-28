@@ -102,7 +102,13 @@ export const createService = ({
     securityGroups: [albSecurityGroup.id],
     subnets: publicSubnetIds,
     enableCrossZoneLoadBalancing: true,
-    idleTimeout: 120,
+    // 5 minutes — large district CSV exports (up to ~1M rows / hundreds of MB)
+    // stream for several minutes on slow consumer connections. The ALB severs
+    // any TCP connection with >idleTimeout seconds between packets, so we
+    // budget room for occasional PG backpressure stalls without dropping the
+    // download. Bytes ordinarily flow continuously, so this is a ceiling, not
+    // an expected wait time.
+    idleTimeout: 300,
   })
 
   const targetGroup = new aws.lb.TargetGroup('targetGroup', {

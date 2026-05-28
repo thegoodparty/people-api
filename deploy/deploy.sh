@@ -12,6 +12,11 @@ if [ -z "$IMAGE_URI" ]; then
   exit 1
 fi
 
+if [ -z "$ASTRO_ASSUME_ROLE_EXTERNAL_ID" ]; then
+  echo "Error: ASTRO_ASSUME_ROLE_EXTERNAL_ID is not set"
+  exit 1
+fi
+
 PULUMI_CONFIG_PASSPHRASE=$(aws ssm get-parameter \
   --name "pulumi-state-config-passphrase" \
   --with-decryption \

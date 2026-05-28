@@ -8,6 +8,7 @@ import {
   StatsDTO,
 } from './people.schema'
 import { PeopleService } from './services/people.service'
+import { PeopleDownloadService } from './services/peopleDownload.service'
 import { StatsService } from './services/stats.service'
 import { FastifyReply } from 'fastify'
 
@@ -15,6 +16,7 @@ import { FastifyReply } from 'fastify'
 export class PeopleController {
   constructor(
     private readonly peopleService: PeopleService,
+    private readonly peopleDownloadService: PeopleDownloadService,
     private readonly statsService: StatsService,
   ) {}
 
@@ -28,9 +30,12 @@ export class PeopleController {
     @Body() dto: DownloadPeopleDTO,
     @Res() res: FastifyReply,
   ) {
-    res.header('Content-Type', 'text/csv')
-    res.header('Content-Disposition', 'attachment; filename="people.csv"')
-    await this.peopleService.streamPeopleCsv(dto, res)
+    // Headers (Content-Type, Content-Disposition) are set inside
+    // `streamPeopleCsv` only after the pg connection is acquired and the
+    // COPY stream is constructed, so any earlier failure can still surface
+    // as a structured 4xx/5xx instead of an `attachment; filename` header
+    // committing the response to a broken download.
+    await this.peopleDownloadService.streamPeopleCsv(dto, res)
   }
 
   @Get('stats')
