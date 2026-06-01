@@ -8,15 +8,15 @@
 #
 # Usage:
 #   scripts/perf/setup-check.sh
-#   PORT=3001 scripts/perf/setup-check.sh
+#   PORT=3002 scripts/perf/setup-check.sh
 #
 # Env overrides:
-#   PORT                  (default 3000 — the gp-api dev server port)
+#   PORT                  (default 3002 — the people-api dev server port; .env.example uses 3002)
 #   HOST                  (default localhost)
 #   PG_DOCKER_CONTAINER   (default goodparty-postgres)
 set -euo pipefail
 
-PORT="${PORT:-3000}"
+PORT="${PORT:-3002}"
 HOST="${HOST:-localhost}"
 CONTAINER="${PG_DOCKER_CONTAINER:-goodparty-postgres}"
 
@@ -127,7 +127,7 @@ echo
 echo "App:"
 if command -v curl >/dev/null 2>&1; then
   if curl -fsS -o /dev/null --max-time 2 "http://${HOST}:${PORT}/health" 2>/dev/null; then
-    printf "  %s  gp-api dev server reachable at http://%s:%s/health\n" "$OK" "$HOST" "$PORT"
+    printf "  %s  people-api dev server reachable at http://%s:%s/health\n" "$OK" "$HOST" "$PORT"
   else
     printf "  %s  no listener on http://%s:%s (start: npm run start:dev)\n" "$WARN" "$HOST" "$PORT"
   fi
