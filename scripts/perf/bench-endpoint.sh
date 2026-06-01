@@ -16,7 +16,7 @@
 #   PORT=3001 HOST=127.0.0.1 scripts/perf/bench-endpoint.sh /health
 #
 # Env overrides:
-#   PORT   (default 3000)
+#   PORT   (default 3002 — people-api dev server)
 #   HOST   (default localhost)
 #   PROTO  (default http)
 #
@@ -24,7 +24,7 @@
 # If no -c / -d are passed, defaults are 10 connections and 20 seconds.
 set -euo pipefail
 
-PORT="${PORT:-3000}"
+PORT="${PORT:-3002}"
 HOST="${HOST:-localhost}"
 PROTO="${PROTO:-http}"
 
@@ -76,5 +76,28 @@ else
   URL="${PROTO}://${HOST}:${PORT}${TARGET}"
 fi
 
-echo "→ ${AUTOCANNON[*]} ${ARGS[*]} $URL"
+# Redact `-H` header values from the printed command line. autocannon
+# headers commonly carry secrets (`-H 'authorization: Bearer <token>'`),
+# which would otherwise land in terminal output, CI logs, and shell
+# history. The actual exec() call below uses the unmodified ARGS, so
+# autocannon still sends the real headers — only the display is redacted.
+DISPLAY_ARGS=()
+skip_next=false
+for a in "${ARGS[@]}"; do
+  if $skip_next; then
+    DISPLAY_ARGS+=("<redacted>")
+    skip_next=false
+  elif [[ "$a" == "-H" || "$a" == "--header" ]]; then
+    DISPLAY_ARGS+=("$a")
+    skip_next=true
+  elif [[ "$a" == "-H"?* ]]; then
+    DISPLAY_ARGS+=("-H<redacted>")
+  elif [[ "$a" == "--header="* ]]; then
+    DISPLAY_ARGS+=("--header=<redacted>")
+  else
+    DISPLAY_ARGS+=("$a")
+  fi
+done
+
+echo "→ ${AUTOCANNON[*]} ${DISPLAY_ARGS[*]} $URL"
 exec "${AUTOCANNON[@]}" "${ARGS[@]}" "$URL"
