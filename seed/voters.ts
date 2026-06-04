@@ -1,4 +1,4 @@
-// import { Prisma, PrismaClient } from '@prisma/client'
+// import { Prisma, PrismaClient } from '../src/generated/prisma'
 // import { voterFactory } from './factories/voter.factory'
 // import { randomUUID } from 'crypto'
 

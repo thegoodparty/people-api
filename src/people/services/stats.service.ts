@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
-import { DistrictStats } from '@prisma/client'
+import { DistrictStats } from '../../generated/prisma'
 import { createPrismaBase, MODELS } from 'src/prisma/util/prisma.util'
 import { StatsDTO } from '../people.schema'
 
