@@ -35,7 +35,10 @@ ENV PUPPETEER_EXECUTABLE_PATH=/dev/null
 WORKDIR /app
 
 # Install dependencies
-COPY package.json package-lock.json tsconfig.json tsconfig.build.json ./
+COPY package.json package-lock.json tsconfig.json tsconfig.build.json nest-cli.json ./
+# nest-cli.json (above) is required so `nest build` uses the swc builder (flat
+# dist/ layout). Without it the build silently falls back to tsc (dist/src/) and
+# the entrypoint's dist/main.js path no longer resolves.
 
 # Copy application source files, prisma files, and seed data
 COPY src/ ./src
