@@ -19,7 +19,6 @@ export const loggerModule = LoggerModule.forRoot({
       request: {
         method: req.method,
         // @ts-expect-error - req.originalUrl is not typed
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         url: req.originalUrl,
       },
     }),
@@ -43,7 +42,6 @@ export const loggerModule = LoggerModule.forRoot({
     serializers: {
       req: () => undefined,
       res: (res) => ({
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         statusCode: res.statusCode,
         bytes: Number(res.headers['content-length']),
       }),
