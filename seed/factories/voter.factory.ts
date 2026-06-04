@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker'
-import { Voter, USState } from '@prisma/client'
+import { Voter, USState } from '../../src/generated/prisma'
 import { generateFactory } from './generate'
 
 // we need to match the seed to the gp-api office seed.

@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client'
+import { Prisma } from '../../generated/prisma'
 import { FilterData } from '../schemas/filters.schema'
 import { buildVoterFiltersSql } from './filters.sql.utils'
 
