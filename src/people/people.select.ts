@@ -1,4 +1,4 @@
-import { Prisma, Voter } from '@prisma/client'
+import { Prisma, Voter } from '../generated/prisma'
 
 const VOTER_SELECT_COLUMNS = [
   'id',

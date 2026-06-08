@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Prisma } from '@prisma/client'
+import { Prisma } from '../../generated/prisma'
 import { buildVoterFiltersSql } from './filters.sql.utils'
 import { FilterData } from '../schemas/filters.schema'
 

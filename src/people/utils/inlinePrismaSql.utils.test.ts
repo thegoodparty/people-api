@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client'
+import { Prisma } from '../../generated/prisma'
 import { describe, expect, it } from 'vitest'
 import { inlinePrismaSql } from './inlinePrismaSql.utils'
 
